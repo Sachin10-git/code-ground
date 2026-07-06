@@ -1,0 +1,52 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend API for Code Ground - AI Pair Programming Platform",
+  "main": "src/server.js",
+  "type": "commonjs",
+
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "echo \"Tests coming soon\""
+  },
+
+  "keywords": [
+    "express",
+    "mongodb",
+    "socketio",
+    "ai",
+    "collaboration",
+    "pair-programming"
+  ],
+
+  "author": "Sachin S",
+  "license": "ISC",
+
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.2.0",
+    "http-status-codes": "^2.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.3",
+    "morgan": "^1.11.0",
+    "socket.io": "^4.8.3",
+    "uuid": "^14.0.1"
+  },
+
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "eslint": "^10.6.0",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.9.4"
+  }
+}
