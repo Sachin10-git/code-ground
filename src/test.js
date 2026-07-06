@@ -1,11 +1,3 @@
-const ApiResponse = require("./utils/ApiResponse");
+const AppError = require("./utils/AppError");
 
-const response = new ApiResponse(
-    200,
-    "Backend is working!",
-    {
-        name: "Code Ground"
-    }
-);
-
-console.log(response);
+throw new AppError("Invalid credentials",401);
