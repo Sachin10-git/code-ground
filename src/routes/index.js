@@ -19,6 +19,7 @@ router.get("/", (req, res) => {
 /**
  * Health endpoint
  */
-router.use("/health", healthRoutes);
+router.use("/api/health", healthRoutes);
+router.use("/api/auth", authRoutes);
 
 module.exports = router;
