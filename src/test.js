@@ -1,31 +1,11 @@
-/**
- * -------------------------------------------------------
- * Logger Utility
- * -------------------------------------------------------
- * Centralized logger used across the project.
- * Every log includes a timestamp and log level.
- * -------------------------------------------------------
- */
+const ApiResponse = require("./utils/ApiResponse");
 
-/**
- * Returns the current date & time in a readable format.
- */
-const getTimestamp = () => {
-  return new Date().toLocaleString();
-};
+const response = new ApiResponse(
+    200,
+    "Backend is working!",
+    {
+        name: "Code Ground"
+    }
+);
 
-const logger = {
-  info(message) {
-    console.log(`[${getTimestamp()}] [INFO] ${message}`);
-  },
-
-  warn(message) {
-    console.warn(`[${getTimestamp()}] [WARN] ${message}`);
-  },
-
-  error(message) {
-    console.error(`[${getTimestamp()}] [ERROR] ${message}`);
-  },
-};
-
-module.exports = logger;
+console.log(response);
