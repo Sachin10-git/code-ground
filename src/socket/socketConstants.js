@@ -8,19 +8,14 @@
  */
 
 const SOCKET_EVENTS = {
-
     CONNECTION: "connection",
-
     DISCONNECT: "disconnect",
 
-    JOIN_ROOM: "join-room",
+    ROOM_JOIN: "room:join",
+    ROOM_LEAVE: "room:leave",
 
-    LEAVE_ROOM: "leave-room",
-
-    USER_JOINED: "user-joined",
-
-    USER_LEFT: "user-left",
-
+    USER_JOINED: "room:user-joined",
+    USER_LEFT: "room:user-left",
 };
 
 module.exports = SOCKET_EVENTS;
