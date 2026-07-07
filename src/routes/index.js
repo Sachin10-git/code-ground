@@ -4,6 +4,7 @@ const router = express.Router();
 
 const healthRoutes = require("./health.routes");
 
+const authRoutes = require("./auth.routes");
 /**
  * Root endpoint
  */
