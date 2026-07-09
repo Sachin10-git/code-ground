@@ -2,11 +2,11 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "Backend API for Code Ground - AI Pair Programming Platform",
-  "main": "src/server.js",
+  "main": "backend/src/server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "start": "node backend/src/server.js",
+    "dev": "nodemon backend/src/server.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "echo \"Tests coming soon\""
