@@ -1,6 +1,5 @@
 const User = require("../models/User");
-const { verifyToken } = require("../utils/jwt");
-
+const { verifyAccessToken } = require("../utils/jwt");
 /**
  * Authenticate User using JWT
  */

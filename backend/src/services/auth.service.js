@@ -1,6 +1,9 @@
 const User = require("../models/User");
 const { hashPassword, comparePassword } = require("../utils/password");
-const { generateToken } = require("../utils/jwt");
+const {
+    generateAccessToken,
+    generateRefreshToken,
+} = require("../utils/jwt");
 const AppError = require("../utils/AppError");
 
 const registerUser = async (userData) => {
@@ -32,7 +35,8 @@ const registerUser = async (userData) => {
     });
 
     // Generate JWT
-    const token = generateToken(user._id);
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
 
     // Remove password before sending response
     const userResponse = {
@@ -47,7 +51,8 @@ const registerUser = async (userData) => {
 
     return {
         user: userResponse,
-        token,
+        accessToken,
+        refreshToken,
     };
 
 };
@@ -74,7 +79,8 @@ const loginUser = async (credentials) => {
     }
 
     // Generate JWT
-    const token = generateToken(user._id);
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
     
     // Remove password before sending response
     const userResponse = {
@@ -89,7 +95,8 @@ const loginUser = async (credentials) => {
 
     return {
         user: userResponse,
-        token,
+        accessToken,
+        refreshToken,
     };
 
 };
