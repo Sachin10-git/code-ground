@@ -1,4 +1,5 @@
 const express = require("express");
+const authenticate = require("../middleware/authenticate");
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ router.post(
  */
 router.get(
     "/me",
+    authenticate,
     getCurrentUser
 );
 
@@ -48,6 +50,7 @@ router.get(
  */
 router.post(
     "/logout",
+    authenticate,
     logout
 );
 

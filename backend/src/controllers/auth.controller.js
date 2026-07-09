@@ -43,21 +43,33 @@ const login = async (req, res, next) => {
  */
 const getCurrentUser = async (req, res) => {
 
+    const user = {
+        id: req.user._id,
+        username: req.user.username,
+        email: req.user.email,
+        avatar: req.user.avatar,
+        role: req.user.role,
+        workspaces: req.user.workspaces,
+    };
+
     res.status(200).json({
         success: true,
-        message: "Current user endpoint",
+        message: "Current user fetched successfully",
+        data: {
+            user,
+        },
     });
 
 };
 
 /**
- * Logout
+ * Logout User
  */
 const logout = async (req, res) => {
 
     res.status(200).json({
         success: true,
-        message: "Logged out successfully",
+        message: "Logout successful.",
     });
 
 };
