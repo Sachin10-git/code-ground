@@ -1,4 +1,4 @@
-const User = require("../models/User");
+const User = require("../db/models/User");
 const { verifyAccessToken } = require("../utils/jwt");
 /**
  * Authenticate User using JWT
@@ -18,7 +18,7 @@ const authenticate = async (req, res, next) => {
 
         const token = authHeader.split(" ")[1];
 
-        const decoded = verifyToken(token);
+        const decoded = verifyAccessToken(token);
 
         const user = await User.findById(decoded.id).select("-password");
 

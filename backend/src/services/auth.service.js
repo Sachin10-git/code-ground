@@ -1,8 +1,13 @@
-const User = require("../models/User");
+const User = require("../db/models/User");
 const { hashPassword, comparePassword } = require("../utils/password");
+const {
+    createRefreshToken,
+} = require("./refreshToken.service");
+
 const {
     generateAccessToken,
     generateRefreshToken,
+    getRefreshTokenExpiryDate,
 } = require("../utils/jwt");
 const AppError = require("../utils/AppError");
 
@@ -37,6 +42,12 @@ const registerUser = async (userData) => {
     // Generate JWT
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
+
+    await createRefreshToken(
+    user._id,
+    refreshToken,
+    getRefreshTokenExpiryDate()
+    );
 
     // Remove password before sending response
     const userResponse = {
@@ -82,6 +93,11 @@ const loginUser = async (credentials) => {
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
     
+    await createRefreshToken(
+    user._id,
+    refreshToken,
+    getRefreshTokenExpiryDate()
+);
     // Remove password before sending response
     const userResponse = {
     id: user._id,

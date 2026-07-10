@@ -11,7 +11,7 @@
  * -------------------------------------------------------
  */
 
-const env = require("../config/env");
+const env = require("../db/config/env");
 
 /**
  * Global Error Middleware
