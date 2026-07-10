@@ -57,6 +57,31 @@ const login = async (req, res, next) => {
 };
 
 /**
+ * Refresh Access Token
+ */
+const refresh = async (req, res, next) => {
+    try {
+
+        const refreshToken = req.cookies.refreshToken;
+
+        const result = await authService.refreshAccessToken(refreshToken);
+
+        const { refreshToken: newRefreshToken, ...responseData } = result;
+
+        res.cookie("refreshToken", newRefreshToken, refreshCookieOptions);
+
+        res.status(200).json({
+            success: true,
+            message: "Access token refreshed successfully",
+            data: responseData,
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Get Current User
  */
 const getCurrentUser = async (req, res) => {
@@ -83,20 +108,131 @@ const getCurrentUser = async (req, res) => {
 /**
  * Logout User
  */
-const logout = async (req, res) => {
+const logout = async (req, res, next) => {
+    try {
 
-    res.clearCookie("refreshToken");
+        const refreshToken = req.cookies.refreshToken;
 
-    res.status(200).json({
-        success: true,
-        message: "Logout successful.",
-    });
+        await authService.logoutUser(refreshToken);
 
+        res.clearCookie("refreshToken");
+
+        res.status(200).json({
+            success: true,
+            message: "Logged out from all devices successfully.",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Forgot Password
+ */
+const forgotPassword = async (req, res, next) => {
+    try {
+
+        await authService.forgotPassword(req.body.email);
+
+        res.status(200).json({
+            success: true,
+            message: "Password reset email sent successfully.",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Reset Password
+ */
+const resetPassword = async (req, res, next) => {
+    try {
+
+        await authService.resetPassword(
+            req.params.token,
+            req.body.password
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Password reset successfully.",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Logout All Devices
+ */
+const logoutAll = async (req, res, next) => {
+    try {
+
+        const refreshToken = req.cookies.refreshToken;
+
+        await authService.logoutUser(refreshToken);
+
+        res.clearCookie("refreshToken");
+
+        res.status(200).json({
+            success: true,
+            message: "All devices logged out successfully.",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Send Verification Email
+ */
+const sendVerificationEmail = async (req, res, next) => {
+    try {
+
+        await authService.sendVerificationEmail(req.user._id);
+
+        res.status(200).json({
+            success: true,
+            message: "Verification email sent successfully.",
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Verify Email
+ */
+const verifyEmail = async (req, res, next) => {
+    try {
+
+        await authService.verifyEmail(req.params.token);
+
+        res.status(200).json({
+            success: true,
+            message: "Email verified successfully.",
+        });
+
+    } catch (error) {
+        next(error);
+    }
 };
 
 module.exports = {
     register,
     login,
+    refresh,
     getCurrentUser,
     logout,
+    logoutAll,
+    forgotPassword,
+    resetPassword,
+    sendVerificationEmail,
+    verifyEmail,
 };
