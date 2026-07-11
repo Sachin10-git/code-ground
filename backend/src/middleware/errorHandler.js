@@ -4,7 +4,7 @@
  * -------------------------------------------------------
  */
 
-const env = require("../config/env");
+const env = require("../db/config/env");
 const logger = require("../utils/logger");
 
 const errorHandler = (err, req, res, next) => {
