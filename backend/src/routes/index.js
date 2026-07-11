@@ -5,6 +5,10 @@ const router = express.Router();
 const healthRoutes = require("./health.routes");
 
 const authRoutes = require("./auth.routes");
+
+const projectRoutes = require("./project.routes");
+
+const invitationRoutes = require("./invitation.routes");
 /**
  * Root endpoint
  */
@@ -22,5 +26,6 @@ router.get("/", (req, res) => {
  */
 router.use("/api/health", healthRoutes);
 router.use("/api/auth", authRoutes);
+router.use("/api/projects", invitationRoutes);
 
 module.exports = router;
