@@ -26,6 +26,11 @@ router.get("/", (req, res) => {
  */
 router.use("/api/health", healthRoutes);
 router.use("/api/auth", authRoutes);
-router.use("/api/projects", invitationRoutes);
+
+// Workspace APIs
+router.use("/api/projects", projectRoutes);
+
+// Invitation APIs
+router.use("/api/invitations", invitationRoutes);
 
 module.exports = router;

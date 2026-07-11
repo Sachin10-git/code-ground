@@ -1,8 +1,8 @@
 const Invitation = require("../models/Invitation");
-const Project = require("../models/Project");
-const User = require("../models/User");
+const Project = require("../db/models/project");
+const User = require("../db/models/User");
 
-const ApiError = require("../utilities/ApiError");
+const ApiError = require("../utils/ApiError");
 
 /**
  * -------------------------------------------------------

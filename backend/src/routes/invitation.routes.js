@@ -19,30 +19,25 @@ const {
 // Temporary
 // Replace with authenticate middleware later
 
-// const authenticate = require("../middleware/authenticate");
+const authenticate = require("../middleware/authenticate");
 
 router.post(
-
     "/:id/invite",
-
+    authenticate,
     validateInvite,
-
     validate,
-
     inviteMember
-
 );
 
 router.post(
-
     "/invite/:invitationId/accept",
-
+    authenticate,
     acceptInvitation
-
 );
 
 router.post(
     "/invite/:invitationId/reject",
+    authenticate,
     rejectInvitation
 );
 

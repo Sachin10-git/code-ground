@@ -1,6 +1,6 @@
 const projectService = require("../services/projectService");
 const asyncHandler = require("../middleware/asyncHandler");
-const ApiError = require("../utilities/ApiError");
+const ApiError = require("../utils/ApiError");
 const ApiResponse = require("../utilities/ApiResponse");
 
 /**

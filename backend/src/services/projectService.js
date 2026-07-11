@@ -1,5 +1,5 @@
-const Project = require("../models/Project");
-const ApiError = require("../utilities/ApiError");
+const Project = require("../db/models/project");
+const ApiError = require("../utils/ApiError");
 /**
  * Create a new workspace
  */
@@ -116,26 +116,6 @@ const leaveWorkspace = async (projectId, userId) => {
 
 };
 
-/**
- * -------------------------------------------------------
- * Get Workspace Members
- * -------------------------------------------------------
- */
-
-const getProjectMembers = asyncHandler(async (req, res) => {
-
-    const members = await projectService.getProjectMembers(
-        req.params.id
-    );
-
-    return ApiResponse.success(
-        res,
-        200,
-        "Workspace members fetched successfully",
-        members
-    );
-
-});
 
 /**
  * -------------------------------------------------------
@@ -198,14 +178,4 @@ module.exports = {
     getProjectMembers,
     isProjectMember,
     isProjectOwner
-};
-
-module.exports = {
-    createProject,
-    getProjects,
-    getProjectById,
-    updateProject,
-    deleteProject,
-    leaveWorkspace,
-    getProjectMembers
 };

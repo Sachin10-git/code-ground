@@ -1,5 +1,5 @@
-const Project = require("../models/Project");
-const ApiError = require("../utilities/ApiError");
+const Project = require("../db/models/project");
+const ApiError = require("../utils/ApiError");
 const asyncHandler = require("./asyncHandler");
 
 /**
