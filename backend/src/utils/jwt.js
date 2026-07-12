@@ -1,5 +1,3 @@
-console.log("JWT_ACCESS_SECRET:", process.env.JWT_ACCESS_SECRET);
-console.log("JWT_REFRESH_SECRET:", process.env.JWT_REFRESH_SECRET);
 
 const jwt = require("jsonwebtoken");
 
