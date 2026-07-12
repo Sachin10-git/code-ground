@@ -2,47 +2,31 @@
  * -------------------------------------------------------
  * Global Error Handling Middleware
  * -------------------------------------------------------
- * Handles every error thrown inside the application.
- *
- * Responsibilities:
- * - Catch AppError
- * - Catch unexpected errors
- * - Send standardized JSON responses
- * -------------------------------------------------------
  */
 
 const env = require("../db/config/env");
+const logger = require("../utils/logger");
 
-/**
- * Global Error Middleware
- *
- * Express recognizes this as an error handler because
- * it has four parameters:
- *
- * (err, req, res, next)
- */
 const errorHandler = (err, req, res, next) => {
 
-    // Default values
-    let statusCode = err.statusCode || 500;
+    const statusCode = err.statusCode || 500;
 
-    let message = err.message || "Internal Server Error";
+    const message = err.message || "Internal Server Error";
 
-    /**
-     * During development,
-     * include stack trace for easier debugging.
-     */
+    // Log every error
+    logger.error(`${req.method} ${req.originalUrl} - ${message}`);
+
     const response = {
         success: false,
         statusCode,
-        message,
+        message
     };
 
     if (env.NODE_ENV === "development") {
         response.stack = err.stack;
     }
 
-    return res.status(statusCode).json(response);
+    res.status(statusCode).json(response);
 };
 
 module.exports = errorHandler;
