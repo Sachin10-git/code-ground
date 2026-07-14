@@ -31,3 +31,7 @@ const FolderSchema = new mongoose.Schema(
 });
 
 module.exports = mongoose.model("Folder", FolderSchema);
+FolderSchema.index({
+    projectId: 1,
+    parentFolderId: 1,
+});
