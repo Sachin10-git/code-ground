@@ -28,8 +28,22 @@ const getRoomUsers = (roomId) => {
     : [];
 };
 
+const removeSocketFromAllRooms = (socket) => {
+    for (const [roomId, users] of rooms.entries()) {
+        if (users.has(socket.id)) {
+            users.delete(socket.id);
+
+            if (users.size === 0) {
+                rooms.delete(roomId);
+            }
+        }
+    }
+};
+
+
 module.exports = {
-  joinRoom,
-  leaveRoom,
-  getRoomUsers,
+    joinRoom,
+    leaveRoom,
+    getRoomUsers,
+    removeSocketFromAllRooms,
 };
