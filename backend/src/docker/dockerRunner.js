@@ -7,6 +7,10 @@ const runContainer = (
     timeout = 5000
 ) => {
 
+    console.log("Image:", image);
+    console.log("Directory:", directory);
+    console.log("Command:", command);
+
     return new Promise((resolve, reject) => {
 
         const docker = spawn(
@@ -34,13 +38,15 @@ const runContainer = (
         let stdout = "";
         let stderr = "";
 
-        docker.stdout.on("data", (data) => {
-            stdout += data.toString();
-        });
+docker.stdout.on("data", (data) => {
+    console.log("STDOUT:", data.toString());
+    stdout += data.toString();
+});
 
-        docker.stderr.on("data", (data) => {
-            stderr += data.toString();
-        });
+docker.stderr.on("data", (data) => {
+    console.log("STDERR:", data.toString());
+    stderr += data.toString();
+});
 
         const timer = setTimeout(() => {
 
@@ -54,17 +60,19 @@ const runContainer = (
 
         }, timeout);
 
-        docker.on("close", (code) => {
+docker.on("close", (code) => {
 
-            clearTimeout(timer);
+    console.log("Container exited:", code);
 
-            resolve({
-                stdout,
-                stderr,
-                exitCode: code,
-            });
+    clearTimeout(timer);
 
-        });
+    resolve({
+        stdout,
+        stderr,
+        exitCode: code,
+    });
+
+});
 
         docker.on("error", (err) => {
 

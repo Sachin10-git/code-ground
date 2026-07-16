@@ -13,20 +13,13 @@ module.exports = {
         command: ["node", "/code/main.js"],
     },
 
-    cpp: {
-        image: "gcc:latest",
-
-        filename: "main.cpp",
-
-        compile: [
-            "g++",
-            "main.cpp",
-            "-o",
-            "main"
-        ],
-
-        execute: [
-            "./main"
-        ],
-    },
+cpp: {
+    image: "gcc:latest",
+    filename: "main.cpp",
+    command: [
+        "sh",
+        "-c",
+        "g++ main.cpp -o main && ./main"
+    ]
+}
 };

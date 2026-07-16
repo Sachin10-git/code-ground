@@ -22,12 +22,19 @@ const runCode = async ({ language, code }) => {
 
     try {
 
+        // Write the user's source code to the temp directory
         await writeSourceFile(
             directory,
             config.filename,
             code
         );
 
+        const fs = require("fs/promises");
+
+console.log("Directory:", directory);
+console.log("Files:", await fs.readdir(directory));
+
+        // Execute inside Docker
         const result = await runContainer(
             config.image,
             directory,
@@ -43,6 +50,7 @@ const runCode = async ({ language, code }) => {
 
     } finally {
 
+        // Always clean up temporary files
         await deleteTempDirectory(directory);
 
     }
