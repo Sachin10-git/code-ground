@@ -39,6 +39,11 @@ const SOCKET_EVENTS = {
 
     FILE_CHANGE: "editor:file-change",
     FILE_UPDATED: "editor:file-updated",
+
+    AWARENESS_UPDATE: "editor:awareness-update",
+    AWARENESS_CHANGED: "editor:awareness-changed",
+
+    DOCUMENT_SYNC: "editor:document-sync",
 };
 
 module.exports = SOCKET_EVENTS;

@@ -1,20 +1,32 @@
+const Y = require("yjs");
 const SOCKET_EVENTS = require("./socketConstants");
+const { getDocument } = require("../crdt/yjsManager");
+const { saveDocument } = require("../crdt/persistenceManager");
+const { createSnapshot } = require("../crdt/snapshotManager");
 
 /**
- * Broadcast editor changes to everyone else
+ * Apply incoming CRDT update
+ * and broadcast it.
  */
-const broadcastChanges = (
+const broadcastChanges = async (
     io,
     socket,
     roomId,
-    change
+    update
 ) => {
 
+    const doc = getDocument(roomId);
+
+    // Apply update to local document
+    Y.applyUpdate(doc, update);
+    await saveDocument(roomId, doc);
+    await createSnapshot(roomId, doc);
+    // Broadcast to everyone else
     socket.to(roomId).emit(
         SOCKET_EVENTS.FILE_UPDATED,
         {
             socketId: socket.id,
-            change,
+            update,
         }
     );
 
