@@ -9,6 +9,8 @@ const authRoutes = require("./auth.routes");
 const projectRoutes = require("./project.routes");
 
 const invitationRoutes = require("./invitation.routes");
+
+const runnerRoutes = require("./runner.routes");
 /**
  * Root endpoint
  */
@@ -32,5 +34,7 @@ router.use("/api/projects", projectRoutes);
 
 // Invitation APIs
 router.use("/api/invitations", invitationRoutes);
+
+router.use("/api/run", runnerRoutes);
 
 module.exports = router;
