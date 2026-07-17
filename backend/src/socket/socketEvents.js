@@ -35,7 +35,10 @@ const {
     removeAwareness,
 } = require("../crdt/awarenessManager");
 
-const { getDocument } = require("../crdt/yjsManager");
+const {
+    getDocument,
+    removeDocument,
+} = require("../crdt/yjsManager");
 const { loadDocument } = require("../crdt/persistenceManager");
 
 const {
@@ -200,33 +203,38 @@ socket.on(
     }
 );
 
-  socket.on(SOCKET_EVENTS.DISCONNECT, () => {
+  socket.on("disconnecting", () => {
 
     const rooms = [...socket.rooms];
 
-    removeSocketFromAllRooms(socket);
-
     rooms.forEach((roomId) => {
 
-        if (roomId === socket.id) return;
+    if (roomId === socket.id) return;
 
-        const awareness = getAwareness(roomId);
-        awareness.setLocalState(null);
+    leaveRoom(socket, roomId);
 
-        const room = io.sockets.adapter.rooms.get(roomId);
+    // Notify remaining users
+    io.to(roomId).emit(
+        SOCKET_EVENTS.USER_LEFT,
+        getRoomUsers(roomId)
+    );
 
-        if (!room || room.size === 0) {
+    // Clear awareness
+    const awareness = getAwareness(roomId);
+    awareness.setLocalState(null);
 
-            clearSaveTimer(roomId);
+    // Cleanup empty room
+    const room = io.sockets.adapter.rooms.get(roomId);
 
-            stopSnapshot(roomId);
+    if (!room || room.size === 0) {
+        clearSaveTimer(roomId);
+        stopSnapshot(roomId);
+        removeAwareness(roomId);
+        removeDocument(roomId);
+    }
+});
 
-            removeAwareness(roomId);
-
-            removeDocument(roomId);
-        }
-
-    });
+removeSocketFromAllRooms(socket);
 
     console.log(`Socket Disconnected: ${socket.id}`);
 

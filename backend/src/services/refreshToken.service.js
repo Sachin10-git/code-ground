@@ -33,7 +33,7 @@ const revokeRefreshToken = async (token) => {
     return await RefreshToken.findOneAndUpdate(
         { token },
         { isRevoked: true },
-        { new: true }
+        { returnDocument: "after" }
     );
 
 };

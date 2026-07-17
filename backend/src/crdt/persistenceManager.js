@@ -15,7 +15,7 @@ const saveDocument = async (roomId, doc) => {
         { state },
         {
             upsert: true,
-            new: true,
+            returnDocument: "after",
         }
     );
 

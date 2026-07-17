@@ -34,7 +34,10 @@ const recoverDocument = async (roomId, doc) => {
 
     const snapshot = await getLatestSnapshot(roomId);
 
-    if (!snapshot) return false;
+    if (!snapshot) {
+        console.log("[CRDT] No snapshot found");
+        return false;
+    }
 
     Y.applyUpdate(
         doc,
@@ -42,7 +45,6 @@ const recoverDocument = async (roomId, doc) => {
     );
 
     return true;
-
 };
 
 module.exports = {
