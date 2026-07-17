@@ -1,44 +1,38 @@
-const awarenessStates = new Map();
+const { Awareness } = require("y-protocols/awareness");
+const { getDocument } = require("./yjsManager");
+
+const awarenessInstances = new Map();
 
 /**
- * Update awareness state
- */
-const updateAwareness = (roomId, socketId, state) => {
-
-    if (!awarenessStates.has(roomId)) {
-        awarenessStates.set(roomId, new Map());
-    }
-
-    awarenessStates
-        .get(roomId)
-        .set(socketId, state);
-
-};
-
-/**
- * Get awareness state
+ * Get or create Awareness instance
  */
 const getAwareness = (roomId) => {
 
-    return awarenessStates.has(roomId)
-        ? [...awarenessStates.get(roomId).values()]
-        : [];
+    if (!awarenessInstances.has(roomId)) {
+
+        const doc = getDocument(roomId);
+
+        awarenessInstances.set(
+            roomId,
+            new Awareness(doc)
+        );
+
+    }
+
+    return awarenessInstances.get(roomId);
 
 };
 
 /**
- * Remove awareness
+ * Remove Awareness instance
  */
-const removeAwareness = (roomId, socketId) => {
+const removeAwareness = (roomId) => {
 
-    if (!awarenessStates.has(roomId)) return;
-
-    awarenessStates.get(roomId).delete(socketId);
+    awarenessInstances.delete(roomId);
 
 };
 
 module.exports = {
-    updateAwareness,
     getAwareness,
     removeAwareness,
 };
