@@ -14,6 +14,7 @@ const folderRoutes = require("./folder.routes");
 
 const fileRoutes = require("./file.routes");
 
+const aiRoutes = require("./ai.routes");
 /**
  * Root endpoint
  */
@@ -41,5 +42,7 @@ router.use("/api/invitations", invitationRoutes);
 router.use("/api/projects", folderRoutes);
 
 router.use("/api/projects", fileRoutes);
+
+router.use("/api/ai", aiRoutes);
 
 module.exports = router;
