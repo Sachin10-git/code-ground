@@ -10,11 +10,15 @@ const projectRoutes = require("./project.routes");
 
 const invitationRoutes = require("./invitation.routes");
 
+<<<<<<< HEAD
 const folderRoutes = require("./folder.routes");
 
 const fileRoutes = require("./file.routes");
 
 const aiRoutes = require("./ai.routes");
+=======
+const runnerRoutes = require("./runner.routes");
+>>>>>>> origin/docker-phase9
 /**
  * Root endpoint
  */
@@ -44,5 +48,7 @@ router.use("/api/projects", folderRoutes);
 router.use("/api/projects", fileRoutes);
 
 router.use("/api/ai", aiRoutes);
+
+router.use("/api/run", runnerRoutes);
 
 module.exports = router;
