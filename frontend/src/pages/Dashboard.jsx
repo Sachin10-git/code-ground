@@ -15,43 +15,50 @@
  * ── Data flow ───────────────────────────────────────────────────────
  *
  *   On mount:
- *     1. GET /documents          → list of user's docs (with session summary)
- *     2. Render the grid
+ *     1. GET /projects            → list of the user's workspaces
+ *     2. Render the grid (each workspace normalized to the doc shape
+ *        below via normalizeProject())
  *
  *   New document:
  *     1. User clicks "New document"
  *     2. <NewDocModal> opens — user enters title + picks language
- *     3. POST /documents         → { id, title, language, ... }
+ *     3. POST /projects          → { name: title, language }
  *     4. Prepend new doc to local state (no re-fetch needed)
  *     5. navigate('/editor/:id') — go straight into the editor
  *
  *   Delete document:
  *     1. User clicks ✕ on a doc card
  *     2. Confirmation shown inline (not a browser alert)
- *     3. DELETE /documents/:id
+ *     3. DELETE /projects/:id
  *     4. Remove from local state
  *
  * ── API contract ────────────────────────────────────────────────────
  *
- *   GET    /documents
- *     → Array<{
- *         id, title, language, is_public,
- *         content, updated_at, created_at,
- *         owner_name,           // from JOIN with users
- *         member_count,         // number of collaborators
- *         session_summary,      // AI-generated after last session (nullable)
- *         last_session_at,      // timestamp of last session (nullable)
- *       }>
+ *   The backend's real "workspace"/Project shape (see
+ *   backend/src/db/models/project.js) is different from what this page
+ *   renders, so normalizeProject() (below) adapts it:
  *
- *   POST   /documents          body: { title, language }   → Document
- *   DELETE /documents/:id                                  → { success: true }
+ *     Project { _id, name, description, ownerId, members[], visibility,
+ *               language, githubRepo, createdAt, updatedAt }
+ *       → { id, title, language, updatedAt, member_count, is_public }
+ *
+ *   `session_summary` / `last_session_at` have no backend equivalent
+ *   yet and are left undefined — the render code already guards both.
+ *
+ *   GET    /api/projects       → { success, message, data: Project[] }
+ *   POST   /api/projects       body: { name, language } → { data: Project }
+ *   DELETE /api/projects/:id                            → { success, message }
+ *
+ *   Errors are read via extractApiError() (below) — the project routes'
+ *   validator returns `errors` as an array (`[{msg, path}]`), unlike
+ *   auth's keyed-object shape, so it isn't safe to assume one form.
  *
  * ── Local state ─────────────────────────────────────────────────────
  *
  *   docs         — the document list from the API
  *   loading      — true while the initial fetch is in flight
- *   fetchError   — non-null if the initial fetch failed
- *   creating     — true while POST /documents is in flight
+ *   fetchError   — non-null if the initial fetch, or a later delete, failed
+ *   creating     — true while POST /projects is in flight
  *   showModal    — controls NewDocModal visibility
  *   deleteTarget — id of the doc currently showing inline confirm
  *   deleting     — true while DELETE is in flight
@@ -128,6 +135,48 @@ function avatarColor(username = '') {
     hash = username.charCodeAt(i) + ((hash << 5) - hash);
   }
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+/**
+ * normalizeProject — maps a backend Project/workspace document to the
+ * shape this page's components already render (doc.id, doc.title, etc).
+ * The backend has no `session_summary`/`last_session_at` equivalent yet —
+ * left undefined, which the existing render code already guards against.
+ */
+function normalizeProject(p) {
+  return {
+    id: p.id ?? p._id,
+    title: p.name,
+    language: p.language,
+    updatedAt: p.updatedAt,
+    member_count: Array.isArray(p.members) ? p.members.length : 0,
+    is_public: p.visibility === 'public',
+  };
+}
+
+/**
+ * extractApiError — reads a display-ready message out of an Axios error
+ * for this backend. The project routes' validator returns errors as an
+ * array (`[{msg, path}]`), unlike auth's keyed-object shape, so this
+ * checks both. `fieldKey` (optional) prefers a specific field's message.
+ */
+function extractApiError(err, fieldKey) {
+  const data = err.response?.data;
+  let fieldMessage;
+
+  if (Array.isArray(data?.errors)) {
+    const hit = fieldKey ? data.errors.find(e => e.path === fieldKey) : data.errors[0];
+    fieldMessage = hit?.msg;
+  } else if (data?.errors && typeof data.errors === 'object') {
+    fieldMessage = fieldKey ? data.errors[fieldKey] : Object.values(data.errors)[0];
+  }
+
+  return (
+    fieldMessage ||
+    data?.message ||
+    data?.error ||
+    'Something went wrong. Please try again.'
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -556,7 +605,13 @@ function NewDocModal({ open, onClose, onCreate, creating }) {
     setTitleErr('');
 
     /* Delegate to parent — parent handles the API call */
-    await onCreate({ title: title.trim(), language });
+    try {
+      await onCreate({ title: title.trim(), language });
+    } catch (err) {
+      /* Backend rejected the request (e.g. name too short) — surface
+         it in the same slot as the client-side title error. */
+      setTitleErr(err.message);
+    }
   }
 
   /* Don't render to the DOM at all when closed */
@@ -719,14 +774,11 @@ export default function Dashboard() {
       setLoading(true);
       setFetchError('');
       try {
-        const { data } = await api.get('/documents');
-        if (!cancelled) setDocs(data);
+        const { data } = await api.get('/projects');
+        if (!cancelled) setDocs((data.data ?? []).map(normalizeProject));
       } catch (err) {
         if (!cancelled) {
-          setFetchError(
-            err.response?.data?.error ||
-            'Failed to load documents. Please refresh.'
-          );
+          setFetchError(extractApiError(err));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -745,7 +797,8 @@ export default function Dashboard() {
   const handleCreate = useCallback(async ({ title, language }) => {
     setCreating(true);
     try {
-      const { data: newDoc } = await api.post('/documents', { title, language });
+      const { data } = await api.post('/projects', { name: title, language });
+      const newDoc = normalizeProject(data.data);
 
       /* Optimistic UI: add to front of list immediately */
       setDocs(prev => [newDoc, ...prev]);
@@ -755,8 +808,9 @@ export default function Dashboard() {
       navigate(`/editor/${newDoc.id}`);
 
     } catch (err) {
-      /* Keep modal open so user can retry */
-      console.error('Create doc failed:', err);
+      /* Keep modal open so user can retry — rethrow so NewDocModal's
+         own catch can surface the message under the title field. */
+      throw new Error(extractApiError(err, 'name'));
     } finally {
       setCreating(false);
     }
@@ -773,11 +827,11 @@ export default function Dashboard() {
     setDeletingId(id);
 
     try {
-      await api.delete(`/documents/${id}`);
+      await api.delete(`/projects/${id}`);
     } catch (err) {
       /* Rollback on failure */
       setDocs(prev);
-      console.error('Delete failed:', err);
+      setFetchError(extractApiError(err));
     } finally {
       setDeletingId(null);
     }
