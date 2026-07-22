@@ -230,14 +230,21 @@ export default function Login() {
       navigate('/dashboard', { replace: true });
 
     } catch (err) {
-      /* The Axios interceptor in api.js passes through
-         the response body, so err.response.data.error
-         contains the server's message string. */
+      /* The backend wraps errors as { success, message, errors }
+         (message = general string, errors = per-field object) rather
+         than the { error } shape this catch block originally assumed. */
       const msg =
+        err.response?.data?.message ||
         err.response?.data?.error ||
         'Something went wrong. Please try again.';
 
       setError(msg);
+
+      /* Merge any backend field-level errors into the existing
+         per-field error state so they render under the right input. */
+      if (err.response?.data?.errors) {
+        setFieldErr(prev => ({ ...prev, ...err.response.data.errors }));
+      }
 
       /* If credentials are wrong, clear password
          and move focus back for the user to retry */

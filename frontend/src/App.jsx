@@ -17,6 +17,11 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />;
 }
 
+function PublicOnlyRoute({ children }) {
+  const { user } = useAuth();
+  return user ? <Navigate to="/dashboard" replace /> : children;
+}
+
 /* ───────────────────────────────────────────
    DEV-ONLY TEST PAGES — remove before shipping
 ─────────────────────────────────────────── */
@@ -116,8 +121,12 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/"         element={<Landing />}  />
-      <Route path="/login"    element={<Login />}    />
-      <Route path="/register" element={<Register />} />
+      <Route path="/login"    element={
+        <PublicOnlyRoute><Login /></PublicOnlyRoute>
+      } />
+      <Route path="/register" element={
+        <PublicOnlyRoute><Register /></PublicOnlyRoute>
+      } />
       <Route path="/pricing"  element={<Pricing />}  />
       <Route path="/dashboard" element={
         <PrivateRoute><Dashboard /></PrivateRoute>

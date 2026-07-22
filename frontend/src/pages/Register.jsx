@@ -395,11 +395,23 @@ export default function Register() {
       navigate('/dashboard', { replace: true });
 
     } catch (err) {
+      /* The backend wraps errors as { success, message, errors }
+         (message = general string, errors = per-field object) rather
+         than the { error } shape this catch block originally assumed. */
       const msg =
+        err.response?.data?.message ||
         err.response?.data?.error ||
         'Something went wrong. Please try again.';
 
       setError(msg);
+
+      /* Merge any backend field-level errors (e.g. password complexity
+         rejections the client-side check doesn't catch) into the
+         existing per-field error state so they render under the
+         right input using the component's existing error markup. */
+      if (err.response?.data?.errors) {
+        setFieldErr(prev => ({ ...prev, ...err.response.data.errors }));
+      }
 
       /* 409 = username or email already taken.
          The server message will say which one,

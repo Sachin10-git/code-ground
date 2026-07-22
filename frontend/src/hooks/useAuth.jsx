@@ -105,6 +105,17 @@ function clearSession() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   unwrap — the real backend wraps responses as { success, message, data }
+   (e.g. data: { user, accessToken } on login/register, data: { user }
+   on /auth/me), unlike the flat { token, user } shape this file was
+   originally written against. This tolerates either shape so a future
+   backend change doesn't silently break auth again.
+───────────────────────────────────────────────────────────────────── */
+function unwrap(resData) {
+  return resData?.data ?? resData;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    CONTEXT
 ───────────────────────────────────────────────────────────────────── */
 const AuthContext = createContext(null);
@@ -136,10 +147,11 @@ export function AuthProvider({ children }) {
 
       try {
         const { data } = await api.get('/auth/me');
+        const { user: freshUser } = unwrap(data);
         if (!cancelled) {
-          setUser(data);
+          setUser(freshUser);
           /* Keep the cached copy fresh too */
-          writeSession(token, data);
+          writeSession(token, freshUser);
         }
       } catch {
         /* Token invalid/expired — fully sign out.
@@ -166,9 +178,10 @@ export function AuthProvider({ children }) {
      (matches the pattern already used in Login.jsx's catch block). */
   const login = useCallback(async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
-    writeSession(data.token, data.user);
-    setUser(data.user);
-    return data.user;
+    const { user: loggedInUser, accessToken, token } = unwrap(data);
+    writeSession(accessToken ?? token, loggedInUser);
+    setUser(loggedInUser);
+    return loggedInUser;
   }, []);
 
   /* ── register ──
@@ -177,9 +190,10 @@ export function AuthProvider({ children }) {
      signs the user in immediately, no separate login step needed. */
   const register = useCallback(async (username, email, password) => {
     const { data } = await api.post('/auth/register', { username, email, password });
-    writeSession(data.token, data.user);
-    setUser(data.user);
-    return data.user;
+    const { user: newUser, accessToken, token } = unwrap(data);
+    writeSession(accessToken ?? token, newUser);
+    setUser(newUser);
+    return newUser;
   }, []);
 
   /* ── logout ──
