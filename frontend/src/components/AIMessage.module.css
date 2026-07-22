@@ -1,0 +1,299 @@
+/*
+ * AIMessage.module.css — Code Ground chat message bubble
+ *
+ * Design tokens (same system as all other components):
+ *   Base bg:       #080B14
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Accent cyan:   #22D3EE
+ *   Warning amber: #F59E0B
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *   Text hint:     #334155
+ *
+ * This file covers ONLY the message bubble and its contents:
+ * avatar, label/timestamp row, text segments, code blocks
+ * (both completed and in-progress), and copy buttons.
+ *
+ * Sidebar-level styles (header, input, empty state, thinking dots,
+ * scroll button) live in AISidebar.module.css.
+ */
+
+/* ── Message row ─────────────────────────── */
+.msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 14px;
+  animation: fade_in 0.2s ease;
+  transition: background 0.1s;
+}
+.msg:hover { background: rgba(255, 255, 255, 0.015); }
+
+/*
+ * Role-specific variants — currently identical alignment.
+ * Kept separate so a future visual distinction (e.g. a tinted
+ * background for the user's own messages) is a one-line change.
+ */
+.msg_user { align-items: flex-start; }
+.msg_ai   { align-items: flex-start; }
+
+/* ── Avatar circle ───────────────────────── */
+.msg_avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  /* Default bg for the AI avatar — overridden inline for users */
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  /* User initials are dark text on their coloured background */
+  color: #080B14;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;   /* nudge to align with first line of text */
+}
+
+/* The <CG/> logo mark inside the AI avatar */
+.ai_logo_mark {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #3B82F6;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/* ── Message body ────────────────────────── */
+.msg_body {
+  flex: 1;
+  min-width: 0;       /* prevent flex blowout on long words/URLs */
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Sender name + timestamp row */
+.msg_meta {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.msg_label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
+}
+
+.msg_time {
+  font-size: 0.625rem;
+  color: #2D3748;
+  white-space: nowrap;
+}
+
+/* Container for parsed segments (text + code blocks) */
+.msg_segments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * Text content.
+ * pre-wrap preserves newlines from the AI response.
+ * word-break: break-word prevents overflow on long identifiers/URLs.
+ */
+.msg_content {
+  font-size: 0.8125rem;
+  color: #E2E8F0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Blinking cursor — used both in plain text and inside code blocks */
+.stream_cursor {
+  display: inline-block;
+  color: #22D3EE;
+  font-size: 0.875rem;
+  animation: blink 1s step-end infinite;
+  line-height: 1;
+}
+
+/* Inside a <code> element the cursor should match the mono font size */
+.code_content .stream_cursor {
+  font-size: 0.75rem;
+}
+
+/* Copy button for the full message */
+.msg_copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #2D3748;
+  font-size: 0.6875rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.msg_copy:hover {
+  color: #94A3B8;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── Code block — completed ──────────────── */
+.code_block {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  margin: 2px 0;
+  /* Smooth transition when a block flips from "writing" to "complete" */
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.code_block_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: #161B22;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.code_lang {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  color: #64748B;
+  text-transform: lowercase;
+}
+
+.code_copy_btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  font-family: 'Inter', sans-serif;
+  color: #334155;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.code_copy_btn:hover {
+  color: #94A3B8;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.code_content {
+  margin: 0;
+  padding: 10px 12px;
+  background: #080B14;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  color: #E2E8F0;
+  overflow-x: auto;
+  white-space: pre;
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B transparent;
+}
+
+.code_content::-webkit-scrollbar       { height: 4px; }
+.code_content::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 2px; }
+
+.code_content code {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ── Code block — IN PROGRESS (streaming) ── */
+/*
+ * While the AI is still writing this block:
+ *   - The border glows amber/cyan instead of the neutral grey
+ *   - The header shows a pulsing dot + "writing <lang>…" instead
+ *     of the language label and Copy button
+ *   - A blinking cursor sits at the end of the partial code
+ *
+ * The transition on .code_block and .code_block_header (defined
+ * above) means when `incomplete` flips to false, the border and
+ * header background animate smoothly back to the normal state
+ * rather than snapping — visually confirms "done writing".
+ */
+.code_block_writing {
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+.code_block_writing .code_block_header {
+  background: rgba(34, 211, 238, 0.04);
+  border-bottom-color: rgba(34, 211, 238, 0.1);
+}
+
+/* "writing <lang>…" label with pulsing dot */
+.code_writing_label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  color: #22D3EE;
+  text-transform: lowercase;
+}
+
+.code_writing_dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #22D3EE;
+  flex-shrink: 0;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+/* ── Keyframes ───────────────────────────── */
+
+@keyframes fade_in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ── Reduced motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .msg,
+  .stream_cursor,
+  .code_writing_dot {
+    animation: none;
+  }
+  .code_block,
+  .code_block_header {
+    transition: none;
+  }
+}

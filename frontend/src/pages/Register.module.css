@@ -1,0 +1,139 @@
+/*
+ * Register.module.css — Code Ground registration page
+ *
+ * This file ONLY contains styles that are unique to Register.jsx.
+ * All shared styles (card, inputs, buttons, error banner, logo,
+ * divider, footer note, etc.) live in Login.module.css and are
+ * imported as `shared` in Register.jsx.
+ *
+ * Unique styles in this file:
+ *   - .field_hint       — subtle grey hint text below a clean input
+ *   - .valid_check      — green "✓ valid" / "✓ match" beside the label
+ *   - .strength_wrap    — container for the strength meter
+ *   - .strength_bars    — row of four bar segments
+ *   - .strength_bar     — a single bar segment (coloured by JS)
+ *   - .strength_label   — "Weak / Fair / Good / Strong" text label
+ *   - .strength_inline  — same label shown inline next to the field label
+ *   - .terms_note       — the "By creating an account…" disclaimer
+ *   - .terms_link       — link inside the disclaimer
+ */
+
+/* ── Field hint ────────────────────────── */
+/*
+ * Shown below a pristine (untouched) field to tell the user
+ * the rules before they make a mistake. Hidden once the field
+ * is touched — replaced by either a success check or an error.
+ */
+.field_hint {
+  font-size: 0.75rem;
+  color: #334155;           /* very muted — background-adjacent */
+  line-height: 1.4;
+  margin-top: 0.1rem;
+}
+
+/* ── Valid check ───────────────────────── */
+/*
+ * Sits on the right side of the label row when the field
+ * passes validation. Green + check icon. Appears with a
+ * quick fade so it doesn't feel jarring.
+ */
+.valid_check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6875rem;     /* 11px — small enough not to compete with the label */
+  font-weight: 500;
+  color: #34D399;           /* green — success signal */
+  animation: fade_in 0.2s ease;
+}
+
+/* ── Password strength meter ───────────── */
+
+/* Wrapper — row of bars + label, with a small top margin */
+.strength_wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  animation: fade_in 0.2s ease;
+}
+
+/* Four bar segments in a row */
+.strength_bars {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+/*
+ * A single bar segment.
+ * Default colour: #1E293B (very dark — "empty" state).
+ * Active colour is set via inline style from the JS component.
+ * border-radius on ends makes it look pill-like.
+ */
+.strength_bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: #1E293B;      /* empty / unfilled */
+}
+
+/* Strength level text — "Weak", "Fair", "Good", "Strong" */
+.strength_label {
+  font-size: 0.6875rem;     /* 11px */
+  font-weight: 500;
+  white-space: nowrap;
+  /* Colour is set by inline style from JS */
+  min-width: 40px;          /* prevents layout shift as label changes */
+  text-align: right;
+}
+
+/*
+ * Inline strength label — same text but placed in the
+ * label row (right side) instead of below the input.
+ * Used as a second visual cue while the bars are below.
+ */
+.strength_inline {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  /* Colour set by inline style in JSX */
+}
+
+/* ── Terms note ────────────────────────── */
+/*
+ * Sits between the last input and the submit button.
+ * Very muted so it doesn't distract from the CTA.
+ */
+.terms_note {
+  font-size: 0.75rem;
+  color: #334155;
+  line-height: 1.6;
+  text-align: center;
+  margin-top: 0.125rem;
+}
+
+.terms_link {
+  color: #3B82F6;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.terms_link:hover {
+  color: #93C5FD;
+}
+
+/* ── Keyframes ─────────────────────────── */
+
+/* Used by valid_check and strength_wrap to fade in gracefully */
+@keyframes fade_in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Reduced motion ────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .valid_check,
+  .strength_wrap {
+    animation: none;
+  }
+}

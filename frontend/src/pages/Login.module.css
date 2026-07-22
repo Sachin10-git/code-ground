@@ -1,0 +1,518 @@
+/*
+ * Login.module.css — Code Ground login page
+ *
+ * Design tokens (same as Landing — kept in sync manually until
+ * a globals.css or CSS variables file is introduced):
+ *   Base bg:      #080B14
+ *   Surface:      #0D1117
+ *   Surface 2:    #161B22    (card border, input bg)
+ *   Border:       rgba(255,255,255,0.07)
+ *   Border hover: rgba(255,255,255,0.13)
+ *   Accent blue:  #3B82F6
+ *   Accent cyan:  #22D3EE
+ *   Text primary: #E2E8F0
+ *   Text muted:   #64748B
+ *   Text hint:    #334155
+ *   Error red:    #F87171
+ *   Error bg:     rgba(248,113,113,0.08)
+ *   Error border: rgba(248,113,113,0.25)
+ *
+ * Layout: single column, card centered with flexbox.
+ * The card has a max-width of 420px — wide enough for
+ * comfortable input, narrow enough to feel focused.
+ */
+
+/* ── Page shell ────────────────────────── */
+.root {
+  min-height: 100vh;
+  background: #080B14;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* ── Decorative background grid ────────── */
+/*
+ * A subtle dot-grid overlay. Uses a radial-gradient trick:
+ * a tiny circle at each repeat point creates the dots.
+ * pointer-events: none so it never blocks clicks.
+ */
+.grid_bg {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.04) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+  pointer-events: none;
+  /* Fade out at edges so it doesn't look clipped */
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 40%, transparent 100%);
+}
+
+/* ── Ambient glow behind the card ─────── */
+/*
+ * A soft blue radial glow that sits behind the card.
+ * Makes the card feel like it's the source of light
+ * rather than just sitting on a flat background.
+ */
+.glow {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(59, 130, 246, 0.09) 0%,
+    transparent 65%
+  );
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ── Main content area ─────────────────── */
+.main {
+  position: relative; /* sits above .grid_bg and .glow */
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* ── Card ──────────────────────────────── */
+.card {
+  width: 100%;
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 2.5rem 2.25rem;
+  /* Subtle inner shadow to lift it off the bg */
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 24px 48px rgba(0, 0, 0, 0.5);
+  /* Fade-up on mount — matches the terminal demo on Landing */
+  animation: fade_up 0.35s ease both;
+}
+
+/* Logo area — centered at the top of the card */
+.card_logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.75rem;
+}
+
+/* ── Logo ──────────────────────────────── */
+/*
+ * Duplicated from Landing — will be extracted to a shared
+ * component (src/components/Logo.jsx) in a later step.
+ */
+.logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  text-decoration: none;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+
+.logo:hover {
+  opacity: 0.8;
+}
+
+.logo_bracket {
+  color: #3B82F6;
+  opacity: 0.7;
+}
+
+.logo_letters {
+  color: #E2E8F0;
+}
+
+/* ── Card header — heading + subheading ── */
+.card_header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.heading {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #E2E8F0;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.375rem;
+}
+
+.subheading {
+  font-size: 0.875rem;
+  color: #64748B;
+  line-height: 1.5;
+}
+
+/* ── Error banner ──────────────────────── */
+/*
+ * Shown for server-level errors (wrong credentials, 500s).
+ * Per-field errors live below each input instead.
+ * role="alert" ensures screen readers announce it without
+ * the user having to navigate to it.
+ */
+.error_banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #F87171;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+  /* Shake animation draws attention without being obnoxious */
+  animation: shake 0.35s ease;
+}
+
+.error_banner svg {
+  /* Align icon with the first line of text */
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Form ──────────────────────────────── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+
+/* ── Field wrapper ─────────────────────── */
+/*
+ * Each field = label (+ optional right element) + input + optional error.
+ * The flex column keeps everything stacked with consistent gaps.
+ */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Label row — flex row used when "Forgot password?" sits on the right */
+.label_row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #94A3B8;
+  letter-spacing: 0.01em;
+}
+
+/* ── Text inputs ───────────────────────── */
+.input {
+  width: 100%;
+  height: 42px;
+  padding: 0 0.875rem;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #E2E8F0;
+  font-size: 0.9375rem;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  /* Prevent browser autofill from overriding our bg */
+  -webkit-text-fill-color: #E2E8F0;
+}
+
+.input::placeholder {
+  color: #2D3748;
+}
+
+/* Autofill background override — browsers ignore background on autofill */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 40px #161B22 inset;
+  -webkit-text-fill-color: #E2E8F0;
+  caret-color: #E2E8F0;
+}
+
+.input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.input:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Error state — red border + red focus ring */
+.input_err {
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.input_err:focus {
+  border-color: #F87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.12);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Password input wrapper ────────────── */
+/*
+ * The eye toggle button sits inside the input visually
+ * by using position: relative on the wrapper and
+ * position: absolute on the button. The input gets
+ * padding-right to avoid text overlapping the button.
+ */
+.password_wrap {
+  position: relative;
+}
+
+.password_wrap .input {
+  /* Make room for the eye button on the right */
+  padding-right: 2.75rem;
+}
+
+/* Eye toggle button */
+.eye_btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #4B5563;
+  cursor: pointer;
+  border-radius: 0 8px 8px 0;
+  transition: color 0.15s;
+  /* Don't let the button be taller than the input */
+  padding: 0;
+}
+
+.eye_btn:hover:not(:disabled) {
+  color: #94A3B8;
+}
+
+.eye_btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ── Per-field error text ──────────────── */
+.field_err {
+  font-size: 0.75rem;
+  color: #F87171;
+  line-height: 1.4;
+  /* role="alert" is on the element itself in JSX */
+}
+
+/* ── Forgot password link ──────────────── */
+.forgot_link {
+  font-size: 0.75rem;
+  color: #3B82F6;
+  text-decoration: none;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.forgot_link:hover {
+  color: #93C5FD;
+}
+
+/* ── Submit button ─────────────────────── */
+.submit_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  margin-top: 0.375rem;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+
+.submit_btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+}
+
+.submit_btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.submit_btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Spinner ───────────────────────────── */
+/*
+ * The SVG arc in Spinner() spins via this animation.
+ * transform-origin: center is important — without it
+ * the SVG rotates around the top-left corner.
+ */
+.spinner {
+  animation: spin 0.7s linear infinite;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* ── Divider ───────────────────────────── */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0 1rem;
+}
+
+.divider_line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.divider_text {
+  font-size: 0.75rem;
+  color: #334155;
+  white-space: nowrap;
+}
+
+/* ── Register link ─────────────────────── */
+.register_prompt {
+  text-align: center;
+  font-size: 0.875rem;
+  color: #64748B;
+  line-height: 1.5;
+}
+
+.register_link {
+  color: #3B82F6;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.register_link:hover {
+  color: #93C5FD;
+}
+
+/* ── Footer note (below card) ──────────── */
+.footer_note {
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+/* Mono comment style — same brand voice as Landing footer */
+.footer_comment {
+  font-family: 'JetBrains Mono', monospace;
+  color: #1E293B;
+}
+
+/* ── Accessibility utility ─────────────── */
+.sr_only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* ── Keyframe animations ───────────────── */
+
+/* Card fades up on page load */
+@keyframes fade_up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Spinner arc rotates */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error banner shakes horizontally to draw attention */
+@keyframes shake {
+  0%        { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX(5px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+  100%      { transform: translateX(0); }
+}
+
+/* ── Responsive ────────────────────────── */
+@media (max-width: 480px) {
+  .card {
+    padding: 2rem 1.5rem;
+    border-radius: 12px;
+  }
+
+  .heading {
+    font-size: 1.25rem;
+  }
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+
+  .error_banner {
+    animation: none;
+  }
+
+  .submit_btn {
+    transition: background 0.15s;
+  }
+}

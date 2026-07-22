@@ -1,0 +1,469 @@
+/*
+ * SnapshotDrawer.module.css — Code Ground version control drawer
+ *
+ * Design tokens (same system as all other components):
+ *   Base bg:       #080B14
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Accent cyan:   #22D3EE
+ *   Success green: #34D399
+ *   Danger red:    #F87171
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *   Text hint:     #334155
+ *
+ * Layout:
+ *   .backdrop  — fixed full-screen overlay, click to close
+ *   .drawer    — fixed panel sliding in from the right, 360px wide
+ *     .header     — title + close button
+ *     .save_form  — input + save button
+ *     .list_header — count label
+ *     .list_wrap  — scrollable area containing .list
+ */
+
+/* ── Backdrop ───────────────────────────── */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 400;
+  animation: backdrop_in 0.2s ease;
+}
+
+/* ── Drawer panel ───────────────────────── */
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  max-width: 92vw;
+  background: #0D1117;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: -16px 0 48px rgba(0, 0, 0, 0.5);
+  z-index: 401;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', -apple-system, sans-serif;
+  animation: slide_in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Spinner ────────────────────────────── */
+.spinner {
+  animation: spin 0.7s linear infinite;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* ── Header ─────────────────────────────── */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #E2E8F0;
+  letter-spacing: -0.01em;
+}
+.title svg { color: #3B82F6; }
+
+.close_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #64748B;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.close_btn:hover {
+  color: #E2E8F0;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Save form ──────────────────────────── */
+.save_form {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(59, 130, 246, 0.02);
+}
+
+.save_input {
+  flex: 1;
+  height: 36px;
+  padding: 0 11px;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  color: #E2E8F0;
+  font-size: 0.8125rem;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.save_input::placeholder { color: #2D3748; }
+.save_input:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.14); }
+.save_input:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.save_input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.save_btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 36px;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s;
+}
+.save_btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: translateY(-1px);
+}
+.save_btn:active:not(:disabled) { transform: translateY(0); }
+.save_btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* ── List header (count) ─────────────────── */
+.list_header {
+  flex-shrink: 0;
+  padding: 10px 18px 8px;
+}
+
+.list_count {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #334155;
+}
+
+/* ── Scrollable list area ────────────────── */
+.list_wrap {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B transparent;
+}
+.list_wrap::-webkit-scrollbar       { width: 5px; }
+.list_wrap::-webkit-scrollbar-track { background: transparent; }
+.list_wrap::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 3px; }
+
+.list {
+  list-style: none;
+  padding: 0 10px 14px;
+}
+
+/* ── Row ────────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 8px;
+  border-radius: 9px;
+  margin-bottom: 2px;
+  transition: background 0.15s;
+  animation: fade_in 0.2s ease;
+}
+.row:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.row_main {
+  flex: 1;
+  min-width: 0; /* allow truncation */
+}
+
+.row_label {
+  font-size: 0.84375rem;
+  font-weight: 500;
+  color: #E2E8F0;
+  margin-bottom: 3px;
+  /* Truncate long labels */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row_meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6875rem;
+  color: #334155;
+}
+
+.meta_item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.meta_dot {
+  color: #1E293B;
+}
+
+/* ── Row actions ─────────────────────────── */
+.row_actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.restore_btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #93C5FD;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.restore_btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+.restore_btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.delete_icon_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #2D3748;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.delete_icon_btn:hover:not(:disabled) {
+  color: #F87171;
+  background: rgba(248, 113, 113, 0.08);
+}
+.delete_icon_btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Inline confirmation bar ─────────────── */
+/*
+ * Replaces the row's default content when the user clicks
+ * Restore or Delete. Forces an explicit second click before
+ * a destructive/overwriting action proceeds.
+ */
+.confirm_bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+  animation: fade_in 0.15s ease;
+}
+
+.confirm_text {
+  flex: 1;
+  font-size: 0.78125rem;
+  color: #94A3B8;
+  line-height: 1.4;
+}
+
+.confirm_actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* "Restore" confirm — blue, matches the restore action's intent */
+.confirm_yes {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93C5FD;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+}
+.confirm_yes:hover:not(:disabled) { background: rgba(59, 130, 246, 0.25); }
+.confirm_yes:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* "Delete" confirm — red, signals the destructive action */
+.confirm_yes_danger {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #F87171;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.confirm_yes_danger:hover { background: rgba(248, 113, 113, 0.25); }
+
+.confirm_no {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #64748B;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.confirm_no:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #E2E8F0;
+}
+.confirm_no:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Empty state ─────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 3rem 1.5rem 2rem;
+  gap: 0.625rem;
+}
+
+.empty_icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.07);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3B82F6;
+  margin-bottom: 6px;
+}
+
+.empty_heading {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #E2E8F0;
+}
+
+.empty_sub {
+  font-size: 0.8125rem;
+  color: #64748B;
+  line-height: 1.65;
+  max-width: 260px;
+}
+
+/* ── Skeleton loading rows ───────────────── */
+.skeleton_row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 8px;
+}
+
+.sk_label,
+.sk_meta {
+  border-radius: 4px;
+  background: linear-gradient(90deg, #161B22 25%, #1E2530 50%, #161B22 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease infinite;
+}
+
+.sk_label { height: 13px; width: 70%; }
+.sk_meta  { height: 9px;  width: 45%; }
+
+/* ── Keyframes ───────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes backdrop_in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Drawer slides in from the right with a slight ease-out overshoot feel */
+@keyframes slide_in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes fade_in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ─────────────────────────── */
+@media (max-width: 480px) {
+  .drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+}
+
+/* ── Reduced motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .backdrop, .row, .confirm_bar {
+    animation: none;
+  }
+  .spinner, .sk_label, .sk_meta {
+    animation: none;
+  }
+  .save_btn, .restore_btn {
+    transition: none;
+  }
+}

@@ -1,0 +1,312 @@
+/*
+ * Presence.module.css — Code Ground live activity bar
+ *
+ * Design tokens (same system as all other components):
+ *   Base bg:       #080B14
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Accent cyan:   #22D3EE
+ *   Success green: #34D399
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *   Text hint:     #334155
+ *
+ * Layout:
+ *   .root    — relative positioning context for the dropdown
+ *   .stack   — the clickable row of overlapping avatar circles
+ *   .dropdown — absolutely positioned panel below the stack
+ *
+ * The --ac CSS variable (avatar colour) is set inline per-avatar
+ * via style={{ '--ac': color }} in the component.
+ */
+
+/* ── Root ───────────────────────────────── */
+.root {
+  position: relative;
+  display: inline-flex;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* ── Avatar stack (the clickable trigger) ── */
+.stack {
+  display: flex;
+  align-items: center;
+  /* Reset button defaults */
+  background: transparent;
+  border: none;
+  padding: 2px 6px 2px 2px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.stack:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.stack:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+/* Wrapper for each avatar in the stack — controls overlap via margin */
+.stack_item {
+  position: relative;
+  transition: transform 0.15s;
+}
+
+/* Lift an avatar slightly on hover of the whole stack — subtle "alive" feel */
+.stack:hover .stack_item:hover {
+  transform: translateY(-2px);
+}
+
+/* Chevron after the avatars */
+.chevron {
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+  color: #334155;
+  transition: color 0.15s, transform 0.15s;
+}
+.stack:hover .chevron { color: #64748B; }
+.stack[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+
+/* ── Avatar circle ──────────────────────── */
+/*
+ * --ac is the avatar colour, set inline per avatar.
+ * The border colour uses the page background so overlapping
+ * avatars have a visible separation ring between them.
+ */
+.avatar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ac, #3B82F6);
+  border: 2px solid #0D1117;
+  font-weight: 700;
+  color: #080B14;
+  flex-shrink: 0;
+  /* Tooltip is built with ::after below */
+}
+
+/* Size variants */
+.avatar_md {
+  width: 26px;
+  height: 26px;
+  font-size: 0.6875rem;
+}
+.avatar_sm {
+  width: 22px;
+  height: 22px;
+  font-size: 0.625rem;
+  border-width: 1.5px;
+}
+
+.avatar_initial {
+  line-height: 1;
+}
+
+/* Overflow "+N" avatar — neutral colours, no tooltip */
+.avatar_overflow {
+  background: #1E293B;
+  color: #94A3B8;
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+/* ── Active ring ─────────────────────────── */
+/*
+ * A pulsing ring around an avatar that's actively editing.
+ * Implemented as a separate absolutely-positioned element so
+ * the ring can scale/pulse without affecting the avatar's own size.
+ */
+.active_ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #34D399;
+  animation: ring_pulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
+/* Slight glow on the avatar itself while active */
+.avatar_active {
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.4);
+}
+
+/* ── Tooltip ─────────────────────────────── */
+/*
+ * CSS-only tooltip using the data-tooltip attribute + ::after.
+ * Appears above the avatar on hover. Avoids extra DOM nodes
+ * and JS positioning logic for a simple "show the name" hint.
+ */
+.avatar[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #E2E8F0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+
+/* Small triangle pointing down from the tooltip to the avatar */
+.avatar[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  border: 4px solid transparent;
+  border-top-color: #161B22;
+  border-bottom: none;
+  /* Flip the triangle to point down toward the avatar */
+  border-top-color: transparent;
+  border-bottom-color: #161B22;
+  margin-top: -4px;
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* Show tooltip + arrow on hover, but only when the dropdown is closed
+   (avoids a tooltip overlapping the open dropdown panel) */
+.stack:not([aria-expanded="true"]) .avatar[data-tooltip]:hover::after,
+.stack:not([aria-expanded="true"]) .avatar[data-tooltip]:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Tooltips inside the dropdown list should never show (redundant there) */
+.dropdown .avatar[data-tooltip]::after,
+.dropdown .avatar[data-tooltip]::before {
+  display: none;
+}
+
+/* ── Dropdown panel ─────────────────────── */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  max-width: 260px;
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  overflow: hidden;
+  animation: dropdown_in 0.15s ease;
+}
+
+.dropdown_header {
+  padding: 9px 12px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.dropdown_list {
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B transparent;
+}
+
+.dropdown_item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  transition: background 0.1s;
+}
+.dropdown_item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dropdown_name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: #E2E8F0;
+  /* Truncate long names */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "you" tag next to the current user's name in the dropdown */
+.you_tag {
+  font-size: 0.625rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: #3B82F6;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* "editing" / "viewing" status text */
+.status_text {
+  font-size: 0.6875rem;
+  color: #334155;
+  flex-shrink: 0;
+}
+.status_active {
+  color: #34D399;
+}
+
+/* ── Keyframes ───────────────────────────── */
+
+/* Pulsing ring around an actively-editing avatar */
+@keyframes ring_pulse {
+  0%   { opacity: 0.9; transform: scale(1); }
+  70%  { opacity: 0;   transform: scale(1.35); }
+  100% { opacity: 0;   transform: scale(1.35); }
+}
+
+/* Dropdown fade + slight slide down on open */
+@keyframes dropdown_in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Reduced motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .active_ring { animation: none; opacity: 0.6; }
+  .dropdown    { animation: none; }
+  .stack_item, .chevron, .avatar[data-tooltip]::after, .avatar[data-tooltip]::before {
+    transition: none;
+  }
+}
+
+/* ── Responsive ─────────────────────────── */
+@media (max-width: 480px) {
+  /* Tooltips can overflow the viewport on narrow screens — hide them,
+     the dropdown remains the primary way to see names */
+  .avatar[data-tooltip]::after,
+  .avatar[data-tooltip]::before {
+    display: none;
+  }
+}

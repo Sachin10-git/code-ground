@@ -1,0 +1,317 @@
+/*
+ * Navbar.module.css — Code Ground editor top bar
+ *
+ * Design tokens (same system as all other components):
+ *   Base bg:       #080B14
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Accent cyan:   #22D3EE
+ *   Success green: #34D399
+ *   Danger red:    #F87171
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *   Text hint:     #334155
+ *
+ * Layout — ported exactly from Editor.module.css's .topbar block,
+ * with the language badge upgraded into a clickable dropdown trigger
+ * and a new .snapshots_btn added to the right group.
+ */
+
+/* ── Top bar root ───────────────────────── */
+.topbar {
+  flex-shrink: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.875rem;
+  background: rgba(8, 11, 20, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  gap: 0.5rem;
+  z-index: 100;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* Three groups */
+.left   { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.centre { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.right  { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ── Spinner ────────────────────────────── */
+.spinner {
+  animation: spin 0.7s linear infinite;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* ── Back button ────────────────────────── */
+.back_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: #64748B;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.back_btn:hover { background: #161B22; color: #E2E8F0; }
+
+/* ── Logo ───────────────────────────────── */
+.logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  text-decoration: none;
+  user-select: none;
+  flex-shrink: 0;
+}
+.logo_bracket { color: #3B82F6; opacity: 0.7; }
+.logo_letters { color: #E2E8F0; }
+
+/* ── Separator ──────────────────────────── */
+.sep {
+  color: #334155;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+/* ── Editable title ─────────────────────── */
+.title_btn {
+  background: transparent;
+  border: none;
+  color: #E2E8F0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+  transition: background 0.15s;
+}
+.title_btn:hover { background: #161B22; }
+
+.title_input {
+  background: #161B22;
+  border: 1px solid #3B82F6;
+  border-radius: 5px;
+  color: #E2E8F0;
+  font-size: 0.875rem;
+  font-family: 'Inter', sans-serif;
+  padding: 3px 8px;
+  outline: none;
+  max-width: 220px;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* ── Language selector ──────────────────── */
+/* Wraps the badge button + dropdown menu, anchors absolute positioning */
+.lang_select {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* The trigger — same visual size as the old read-only badge,
+   now a real <button> with a chevron to signal interactivity */
+.lang_badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 10px;
+  font-size: 0.6875rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: #64748B;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.lang_badge:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #1A2029;
+}
+.lang_badge:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.lang_badge_dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lc, #64748B);
+  flex-shrink: 0;
+}
+
+.lang_chevron {
+  display: flex;
+  align-items: center;
+  color: #334155;
+  margin-left: 1px;
+  transition: transform 0.15s;
+}
+.lang_badge[aria-expanded="true"] .lang_chevron {
+  transform: rotate(180deg);
+}
+
+/* Dropdown menu */
+.lang_menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 168px;
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  list-style: none;
+  padding: 5px;
+  animation: menu_in 0.15s ease;
+}
+
+.lang_option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  font-size: 0.8125rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.lang_option:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #E2E8F0;
+}
+
+.lang_option_dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lang_option_label {
+  flex: 1;
+}
+
+.lang_option_check {
+  display: flex;
+  align-items: center;
+  color: #3B82F6;
+  flex-shrink: 0;
+}
+
+/* ── Connection dot ─────────────────────── */
+.conn_dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+.conn_on  { background: #34D399; }
+.conn_off { background: #F87171; animation: pulse 1.5s ease-in-out infinite; }
+
+/* ── Snapshots button ───────────────────── */
+.snapshots_btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: #94A3B8;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.snapshots_btn:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #E2E8F0;
+}
+
+/* ── Run button ─────────────────────────── */
+.run_btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.875rem;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.run_btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+}
+.run_btn:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+.run_btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.run_btn_running  { background: #1E3A5F !important; color: #93C5FD !important; }
+
+/* ── Keyframes ───────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes menu_in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Responsive ─────────────────────────── */
+
+@media (max-width: 768px) {
+  .title_btn { max-width: 120px; }
+  .snapshots_label { display: none; }
+}
+
+@media (max-width: 600px) {
+  .lang_select { display: none; }
+}
+
+/* ── Reduced motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .conn_off { animation: none; }
+  .lang_menu { animation: none; }
+  .lang_chevron, .run_btn, .snapshots_btn { transition: none; }
+}

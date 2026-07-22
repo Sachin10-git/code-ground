@@ -1,0 +1,361 @@
+/*
+ * OutputPanel.module.css — Code Ground execution output / terminal area
+ *
+ * Design tokens (same system as all other components):
+ *   Base bg:       #080B14
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Success green: #34D399
+ *   Danger red:    #F87171
+ *   Warning amber: #F59E0B
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *   Text hint:     #334155
+ *
+ * Layout:
+ *   .panel          — flex column, fixed header (40px) + variable body
+ *   .resize_handle  — thin draggable strip on the top edge (only when open)
+ *   .header         — toggle button (left) + copy/clear actions (right)
+ *   .body           — scrollable terminal area, height = --body-height
+ *
+ * --body-height is set inline via JS as the user drags the resize handle.
+ */
+
+/* ── Panel root ─────────────────────────── */
+.panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #080B14;
+  font-family: 'Inter', -apple-system, sans-serif;
+  position: relative; /* anchor for the resize handle */
+}
+
+/*
+ * Applied when the panel is expanded. Currently just a hook for
+ * future open-state-only styling (e.g. a subtle top border glow).
+ * Kept as its own class rather than relying on a body-presence
+ * check, since JSX conditionally adds/removes this class directly.
+ */
+.panel_open {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Spinner ────────────────────────────── */
+.spinner {
+  animation: spin 0.7s linear infinite;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* ── Resize handle ───────────────────────── */
+/*
+ * A thin strip on the top edge of the panel. Dragging it (mouse or
+ * touch) resizes the body via the component's pointer handlers.
+ * Also keyboard-accessible: focus + ArrowUp/ArrowDown resize by 16px.
+ */
+.resize_handle {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Slightly transparent — only the grip dots hint at interactivity */
+  background: transparent;
+  transition: background 0.15s;
+  touch-action: none; /* prevent scroll-while-drag on touch devices */
+}
+.resize_handle:hover,
+.resize_handle:focus-visible {
+  background: rgba(59, 130, 246, 0.08);
+}
+.resize_handle:focus-visible {
+  outline: none;
+}
+
+/* Three small dots — the visual "grip" affordance */
+.grip {
+  display: block;
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: #1E293B;
+  transition: background 0.15s;
+}
+.resize_handle:hover .grip,
+.resize_handle:focus-visible .grip {
+  background: #3B82F6;
+}
+
+/* ── Header ─────────────────────────────── */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 8px 0 14px;
+}
+
+/* Left side — the toggle button covering status/title/badge/chevron */
+.header_toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: #64748B;
+  cursor: pointer;
+  padding: 0;
+  min-width: 0; /* allow truncation of children if needed */
+}
+.header_toggle:hover { color: #94A3B8; }
+
+/* ── Status dot ──────────────────────────── */
+.status_dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.dot_idle    { background: #1E293B; }
+.dot_running { background: #F59E0B; animation: pulse 1s ease-in-out infinite; }
+.dot_ok      { background: #34D399; }
+.dot_err     { background: #F87171; }
+
+/* ── Title ──────────────────────────────── */
+.title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748B;
+  flex-shrink: 0;
+}
+
+/* ── Running label ──────────────────────── */
+.running_label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6875rem;
+  color: #F59E0B;
+}
+
+/* ── Result badge — "✓ 312ms" / "✗ 1.24s" ── */
+.badge {
+  font-size: 0.6875rem;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 1px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.badge_ok  { background: rgba(52, 211, 153, 0.1); color: #34D399; }
+.badge_err { background: rgba(248, 113, 113, 0.1); color: #F87171; }
+
+/* Exit code suffix inside the badge */
+.exit_code {
+  opacity: 0.75;
+}
+
+/* ── Chevron ────────────────────────────── */
+.chevron {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  color: #334155;
+  transition: transform 0.2s, color 0.15s;
+  flex-shrink: 0;
+}
+.header_toggle:hover .chevron { color: #64748B; }
+/* Pointing down by default (collapsed); rotate to point up when open */
+.chevron_open { transform: rotate(180deg); }
+
+/* ── Header actions (Copy / Clear) ───────── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.action_btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #334155;
+  font-size: 0.6875rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.action_btn:hover {
+  color: #94A3B8;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── Body ───────────────────────────────── */
+/*
+ * Height is controlled by the --body-height CSS variable, set inline
+ * by the component as the user drags the resize handle (or via the
+ * defaultHeight prop). Scrolls internally when content overflows.
+ */
+.body {
+  height: var(--body-height, 180px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B transparent;
+}
+.body::-webkit-scrollbar       { width: 5px; height: 5px; }
+.body::-webkit-scrollbar-track { background: transparent; }
+.body::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 3px; }
+.body::-webkit-scrollbar-thumb:hover { background: #2D3748; }
+
+/* ── Placeholder / status messages ───────── */
+.placeholder {
+  padding: 10px 14px;
+  font-size: 0.8125rem;
+  color: #1E293B;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.comment {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Blinking cursor next to "running…" placeholder */
+.run_cursor {
+  display: inline-block;
+  color: #F59E0B;
+  animation: blink 1s step-end infinite;
+}
+
+/* ── Stream (stdout / stderr block) ──────── */
+.stream {
+  margin-bottom: 6px;
+}
+.stream:last-child {
+  margin-bottom: 0;
+}
+
+/* "stdout" / "stderr" label above each block */
+.stream_label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 14px 2px;
+}
+.label_stdout { color: #1E5A3F; }   /* dim green — label, not the text itself */
+.label_stderr { color: #7F2A2A; }   /* dim red */
+
+/* ── Line-numbered output ────────────────── */
+.lines {
+  display: flex;
+  flex-direction: column;
+}
+
+.line {
+  display: flex;
+  /* Each line is its own flex row: gutter + content */
+}
+
+/* Gutter — right-aligned line number, dim, fixed width */
+.line_num {
+  flex-shrink: 0;
+  width: 36px;
+  padding: 0 10px 0 0;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  line-height: 1.7;
+  color: #1E293B;
+  user-select: none;
+  /* Subtle separation from content */
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
+  margin-right: 10px;
+}
+
+.line_text {
+  flex: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding-right: 14px;
+}
+
+/* stdout — green text */
+.text_stdout { color: #86EFAC; }
+
+/* stderr — red text */
+.text_stderr { color: #F87171; }
+
+/* ── Truncation note ─────────────────────── */
+.truncated_note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  color: #334155;
+  padding: 6px 14px 2px 56px; /* aligns roughly with line_text content */
+  font-style: italic;
+}
+
+/* ── Keyframes ───────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Reduced motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .dot_running, .run_cursor {
+    animation: none;
+  }
+  .chevron, .resize_handle, .grip, .action_btn {
+    transition: none;
+  }
+}
+
+/* ── Responsive ─────────────────────────── */
+@media (max-width: 480px) {
+  /* Hide line numbers on very narrow screens to save space */
+  .line_num {
+    width: 24px;
+    padding-right: 6px;
+    margin-right: 6px;
+  }
+
+  /* Shorten action button labels via icon-only on tiny screens */
+  .action_btn span { display: none; }
+}
