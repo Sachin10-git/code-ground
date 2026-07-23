@@ -66,6 +66,7 @@ import Presence  from '../components/Presence.jsx';
 import OutputPanel from '../components/OutputPanel.jsx';
 import SnapshotDrawer from '../components/SnapshotDrawer.jsx';
 import Navbar from '../components/Navbar.jsx';
+import FileExplorer from '../components/FileExplorer.jsx';
 import { useYjs } from '../hooks/useYjs.js';
 import { useAI } from '../hooks/useAI.js';
 import { useExecution } from '../hooks/useExecution.js';
@@ -199,12 +200,16 @@ const Spinner = ({ size = 14 }) => (
 ───────────────────────────────────────────────────────────────────── */
 export default function Editor() {
   const { docId }  = useParams();
+  const projectId  = docId; // route param name unchanged (App.jsx untouched); this id is now a real Project _id
   const { user }   = useAuth();
   const navigate   = useNavigate();
 
   const [doc,        setDoc]        = useState(null);
   const [docLoading, setDocLoading] = useState(true);
   const [docError,   setDocError]   = useState('');
+
+  const [selectedFileId, setSelectedFileId] = useState(null);
+  const handleSelectFile = useCallback((file) => setSelectedFileId(file._id), []);
 
   const [peers,      setPeers]      = useState([]);
 
@@ -234,16 +239,20 @@ export default function Editor() {
   const [savingSnapshot, setSavingSnapshot]     = useState(false);
   const [restoringId, setRestoringId]           = useState(null);
 
-  /* Fetch document metadata */
+  /* Fetch project metadata (Phase 3: real Project/Folder/File tree, not the old /documents API) */
   useEffect(() => {
-    if (!docId) return;
-    api.get(`/documents/${docId}`)
-      .then(({ data }) => { setDoc(data); setTitleVal(data.title); })
+    if (!projectId) return;
+    api.get(`/projects/${projectId}/tree`)
+      .then(({ data }) => {
+        const project = data.data.project;
+        setDoc({ title: project.name, language: project.language });
+        setTitleVal(project.name);
+      })
       .catch(err => setDocError(
-        err.response?.status === 404 ? 'Document not found.' : 'Failed to load document.'
+        err.response?.status === 404 ? 'Project not found.' : 'Failed to load project.'
       ))
       .finally(() => setDocLoading(false));
-  }, [docId]);
+  }, [projectId]);
 
   /* Track edits for AI context */
   const handleEditorUpdate = useCallback((text) => {
@@ -516,8 +525,15 @@ function handleAISend(question) {
       documentId={docId}
     />
 
-    {/* ── Body: editor + right panel ── */}
+    {/* ── Body: file explorer + editor + right panel ── */}
     <div className={styles.body}>
+
+      {/* Workspace file explorer (Phase 3 — navigation only, no content binding) */}
+      <FileExplorer
+        projectId={projectId}
+        selectedFileId={selectedFileId}
+        onSelectFile={handleSelectFile}
+      />
 
       {/* Monaco editor */}
       <div className={styles.editor_wrap}>

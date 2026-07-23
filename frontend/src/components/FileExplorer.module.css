@@ -1,0 +1,142 @@
+/*
+ * FileExplorer.module.css — minimal workspace sidebar
+ *
+ * Reuses the same design tokens as Editor.module.css so it looks
+ * native without pulling in any shared stylesheet:
+ *   bg #080B14, surface #0D1117, border rgba(255,255,255,0.07),
+ *   accent #3B82F6, text #E2E8F0, muted #64748B, danger #F87171
+ *
+ * Functionality-first: plain rows, no animation.
+ */
+
+.root {
+  flex-shrink: 0;
+  width: 220px;
+  height: 100%;
+  overflow-y: auto;
+  background: #0D1117;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 0.8125rem;
+  color: #E2E8F0;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.header_title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748B;
+  cursor: pointer;
+}
+
+.header_actions {
+  display: flex;
+  gap: 2px;
+}
+
+.icon_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: #64748B;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.icon_btn:hover { background: #161B22; color: #E2E8F0; }
+
+.state_msg {
+  padding: 0.75rem 0.625rem;
+  color: #64748B;
+  font-size: 0.75rem;
+}
+
+.error_banner {
+  margin: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: #F87171;
+  font-size: 0.75rem;
+  word-break: break-word;
+}
+
+.tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row:hover { background: #161B22; }
+.row:hover .row_actions { visibility: visible; }
+
+.row_selected { background: #1E3A5F; }
+
+.row_chevron {
+  flex-shrink: 0;
+  width: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748B;
+}
+
+.row_icon {
+  flex-shrink: 0;
+  color: #64748B;
+}
+
+.row_name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row_actions {
+  visibility: hidden;
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+}
+
+.inline_input {
+  flex: 1;
+  background: #080B14;
+  border: 1px solid #3B82F6;
+  border-radius: 3px;
+  color: #E2E8F0;
+  font: inherit;
+  padding: 1px 4px;
+  min-width: 0;
+}
+
+.root_actions {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+}
