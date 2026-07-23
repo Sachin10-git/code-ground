@@ -29,6 +29,14 @@ router.patch(
     fileController.renameFile
 );
 /**
+ * Save File Content
+ */
+router.patch(
+    "/files/:fileId/content",
+    authenticate,
+    fileController.updateFileContent
+);
+/**
  * Move File
  */
 router.patch(

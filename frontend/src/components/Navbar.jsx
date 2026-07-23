@@ -323,6 +323,11 @@ export default function Navbar({
   running         = false,
   runDisabled     = false,
   documentId,
+
+  onSaveFile,
+  fileDirty        = false,
+  savingFile       = false,
+  saveFileDisabled = false,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   return (
@@ -380,6 +385,21 @@ export default function Navbar({
           >
             <CameraIcon />
             <span className={styles.snapshots_label}>Snapshots</span>
+          </button>
+        )}
+
+{onSaveFile && (
+          <button
+            className={styles.snapshots_btn}
+            onClick={onSaveFile}
+            disabled={saveFileDisabled || savingFile || !fileDirty}
+            title="Save file (Ctrl/Cmd+S)"
+            aria-label={savingFile ? 'Saving file…' : fileDirty ? 'Save file' : 'File saved'}
+          >
+            {savingFile ? <Spinner size={12} /> : null}
+            <span className={styles.snapshots_label}>
+              {savingFile ? 'Saving…' : fileDirty ? 'Save*' : 'Saved'}
+            </span>
           </button>
         )}
 

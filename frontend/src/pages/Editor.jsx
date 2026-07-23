@@ -107,6 +107,26 @@ function avatarColor(name = '') {
 /* Max edits kept in memory for AI context */
 const MAX_EDIT_LOG = 50;
 
+/* Fallback language detection by file extension — the File model's
+   `language` field defaults to 'plaintext' for every new file, so
+   Monaco's syntax highlighting would otherwise be wrong for anything
+   the user creates via the explorer. */
+const EXT_LANG = {
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  py: 'python',
+  java: 'java',
+  c: 'cpp', cc: 'cpp', cpp: 'cpp', h: 'cpp', hpp: 'cpp',
+  go: 'go',
+  json: 'json', md: 'markdown', html: 'html', css: 'css',
+};
+
+function resolveLanguage(file) {
+  if (file?.language && file.language !== 'plaintext') return file.language;
+  const ext = file?.name?.split('.').pop()?.toLowerCase();
+  return EXT_LANG[ext] ?? 'plaintext';
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    ICONS
 ───────────────────────────────────────────────────────────────────── */
@@ -208,8 +228,12 @@ export default function Editor() {
   const [docLoading, setDocLoading] = useState(true);
   const [docError,   setDocError]   = useState('');
 
-  const [selectedFileId, setSelectedFileId] = useState(null);
-  const handleSelectFile = useCallback((file) => setSelectedFileId(file._id), []);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const selectedFileId = selectedFile?._id ?? null;
+
+  const [dirtyFileIds, setDirtyFileIds] = useState(() => new Set());
+  const [saving,        setSaving]        = useState(false);
+  const [saveError,     setSaveError]     = useState('');
 
   const [peers,      setPeers]      = useState([]);
 
@@ -232,6 +256,102 @@ export default function Editor() {
   const editorRef  = useRef(null);
   const monacoRef  = useRef(null);
   const editLogRef = useRef([]);
+
+  /* Phase 4: per-file Monaco state. One model per opened file (so
+     undo history/cursor/scroll are independent per file), keyed by
+     File._id — never by the Yjs/collaboration docId above. */
+  const selectedFileRef = useRef(null);
+  const modelsRef       = useRef(new Map()); // fileId -> monaco.editor.ITextModel
+  const viewStatesRef   = useRef(new Map()); // fileId -> ICodeEditorViewState
+  const savedContentRef = useRef(new Map()); // fileId -> last content persisted to the backend
+
+  useEffect(() => { selectedFileRef.current = selectedFile; }, [selectedFile]);
+
+  /* Dispose cached models when the project changes or the page unmounts */
+  useEffect(() => {
+    return () => {
+      modelsRef.current.forEach(model => model.dispose());
+      modelsRef.current.clear();
+      viewStatesRef.current.clear();
+      savedContentRef.current.clear();
+    };
+  }, [projectId]);
+
+  const markFileDirty = useCallback((fileId) => {
+    setDirtyFileIds(prev => {
+      if (prev.has(fileId)) return prev;
+      const next = new Set(prev);
+      next.add(fileId);
+      return next;
+    });
+  }, []);
+
+  /* Loads a file's content into Monaco, creating its model on first
+     open and reusing it (with saved view state) on every subsequent
+     switch back to that file. */
+  const openFileInEditor = useCallback((file) => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco || !file) return;
+
+    const prevFile = selectedFileRef.current;
+    if (prevFile && prevFile._id !== file._id) {
+      viewStatesRef.current.set(prevFile._id, editor.saveViewState());
+    }
+
+    let model = modelsRef.current.get(file._id);
+    if (!model) {
+      model = monaco.editor.createModel(
+        file.content ?? '',
+        resolveLanguage(file),
+        monaco.Uri.parse(`inmemory://codeground/${file._id}`),
+      );
+      modelsRef.current.set(file._id, model);
+      savedContentRef.current.set(file._id, file.content ?? '');
+      model.onDidChangeContent(() => markFileDirty(file._id));
+    }
+
+    editor.setModel(model);
+    const viewState = viewStatesRef.current.get(file._id);
+    if (viewState) editor.restoreViewState(viewState);
+    editor.focus();
+  }, [markFileDirty]);
+
+  const handleSelectFile = useCallback((file) => {
+    setSelectedFile(file);
+    setSaveError('');
+    openFileInEditor(file);
+  }, [openFileInEditor]);
+
+  /* Saves the currently open file's content via the Phase 4 endpoint. */
+  const handleSaveFile = useCallback(async () => {
+    const file   = selectedFileRef.current;
+    const editor = editorRef.current;
+    if (!file || !editor) return;
+
+    const content = editor.getValue();
+    setSaving(true);
+    setSaveError('');
+    try {
+      await api.patch(`/projects/files/${file._id}/content`, { content });
+      savedContentRef.current.set(file._id, content);
+      setDirtyFileIds(prev => {
+        if (!prev.has(file._id)) return prev;
+        const next = new Set(prev);
+        next.delete(file._id);
+        return next;
+      });
+    } catch (err) {
+      setSaveError(err.response?.data?.message || 'Failed to save file.');
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  /* Kept in a ref so Monaco's Ctrl/Cmd+S command (bound once at mount)
+     always calls the latest version rather than a stale closure. */
+  const handleSaveFileRef = useRef(handleSaveFile);
+  useEffect(() => { handleSaveFileRef.current = handleSaveFile; }, [handleSaveFile]);
 
   const [showSnapshots, setShowSnapshots]       = useState(false);
   const [snapshots, setSnapshots]               = useState([]);
@@ -275,7 +395,7 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI,
 
   const { output, running, outputOpen, setOutputOpen, run, cancel, clearOutput } = useExecution();
   /* Monaco mount */
-  const handleEditorMount = useCallback(async (editor, monaco) => {
+  const handleEditorMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
@@ -308,22 +428,18 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI,
     });
     monaco.editor.setTheme('codeground');
 
-    /* Bind Yjs to Monaco once both are ready */
-    if (ydocRef.current) {
-      try {
-        const { MonacoBinding } = await import('y-monaco');
-        const ytext = ydocRef.current.getText('content');
-        bindingRef.current = new MonacoBinding(
-          ytext,
-          editor.getModel(),
-          new Set([editor]),
-          awarenessRef.current ?? undefined,
-        );
-      } catch (e) {
-        console.warn('MonacoBinding unavailable:', e.message);
-      }
-    }
-  }, [ydocRef, awarenessRef, bindingRef]);
+    /* Ctrl/Cmd+S saves the currently open file (Phase 4 — no
+       collaboration binding here; Monaco's model is driven directly
+       by the selected file's content, per openFileInEditor above). */
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+      () => handleSaveFileRef.current(),
+    );
+
+    /* If a file was already selected before Monaco finished mounting,
+       load it now. */
+    if (selectedFileRef.current) openFileInEditor(selectedFileRef.current);
+  }, [openFileInEditor]);
 
   /* Save title on blur or Enter */
   async function saveTitle() {
@@ -523,6 +639,10 @@ function handleAISend(question) {
       running={running}
       runDisabled={docLoading}
       documentId={docId}
+      onSaveFile={handleSaveFile}
+      fileDirty={selectedFile ? dirtyFileIds.has(selectedFile._id) : false}
+      savingFile={saving}
+      saveFileDisabled={!selectedFile}
     />
 
     {/* ── Body: file explorer + editor + right panel ── */}
@@ -537,6 +657,18 @@ function handleAISend(question) {
 
       {/* Monaco editor */}
       <div className={styles.editor_wrap}>
+        {saveError && (
+          <div
+            role="alert"
+            style={{
+              position: 'absolute', top: 8, right: 8, zIndex: 5,
+              background: '#7f1d1d', color: '#fecaca',
+              padding: '4px 10px', borderRadius: 6, fontSize: 12,
+            }}
+          >
+            {saveError}
+          </div>
+        )}
         <MonacoEditor
           height="100%"
           language={doc?.language ?? 'javascript'}
@@ -549,6 +681,7 @@ function handleAISend(question) {
             </div>
           }
           options={{
+            readOnly:                   !selectedFile,
             fontSize:                   14,
             fontFamily:                 "'JetBrains Mono', monospace",
             fontLigatures:              true,

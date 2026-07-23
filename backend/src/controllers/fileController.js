@@ -62,6 +62,26 @@ const renameFile = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Update File Content
+ */
+const updateFileContent = asyncHandler(async (req, res) => {
+
+    const file = await fileService.updateFileContent(
+        req.params.fileId,
+        req.user.id,
+        req.body.content
+    );
+
+    return ApiResponse.success(
+        res,
+        200,
+        "File content saved successfully",
+        file
+    );
+
+});
+
+/**
  * Move File
  */
 const moveFile = asyncHandler(async (req, res) => {
@@ -103,6 +123,7 @@ module.exports = {
     createFile,
     getProjectTree,
     renameFile,
+    updateFileContent,
     moveFile,
     deleteFile,
 };

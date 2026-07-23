@@ -138,6 +138,40 @@ const renameFile = async (fileId, userId, name) => {
 };
 
 /**
+ * Update File Content
+ */
+const updateFileContent = async (fileId, userId, content) => {
+
+    const file = await File.findById(fileId);
+
+    if (!file) {
+        throw new ApiError(
+            404,
+            "File not found"
+        );
+    }
+
+    const isMember = await projectService.isProjectMember(
+        file.projectId,
+        userId
+    );
+
+    if (!isMember) {
+        throw new ApiError(
+            403,
+            "You are not a member of this workspace"
+        );
+    }
+
+    file.content = content ?? "";
+
+    await file.save();
+
+    return file;
+
+};
+
+/**
  * Move File
  */
 const moveFile = async (fileId, userId, folderId) => {
@@ -220,7 +254,7 @@ module.exports = {
     createFile,
     getProjectTree,
     renameFile,
+    updateFileContent,
     moveFile,
     deleteFile,
-    moveFile,
 };
