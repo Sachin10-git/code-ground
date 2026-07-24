@@ -24,6 +24,24 @@ const inviteMember = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get Pending Invitations (for the authenticated user)
+ */
+const getMyInvitations = asyncHandler(async (req, res) => {
+
+    const invitations = await invitationService.getPendingInvitations(
+        req.user.email
+    );
+
+    return ApiResponse.success(
+        res,
+        200,
+        "Pending invitations fetched successfully",
+        invitations
+    );
+
+});
+
+/**
  * Accept Invitation
  */
 const acceptInvitation = asyncHandler(async (req, res) => {
@@ -63,6 +81,7 @@ const rejectInvitation = asyncHandler(async (req, res) => {
 
 module.exports = {
     inviteMember,
+    getMyInvitations,
     acceptInvitation,
     rejectInvitation
 };

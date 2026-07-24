@@ -22,7 +22,12 @@ const broadcastChanges = async (
     // Apply update to local document
     try {
 
-    Y.applyUpdate(doc, update);
+    /* `update` arrives as a plain array of byte values (see
+       useYjs.js's FILE_CHANGE emit), not a real Uint8Array/Buffer —
+       Y.applyUpdate needs an actual typed array (it reads
+       .buffer/.byteOffset internally), so this wrap is required
+       regardless of what shape `update` arrives in over the wire. */
+    Y.applyUpdate(doc, new Uint8Array(update));
 
 } catch (err) {
 

@@ -243,6 +243,15 @@ const ClockIcon = () => (
   </svg>
 );
 
+const MailIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 6-10 7L2 6" />
+  </svg>
+);
+
 const LogOutIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -287,6 +296,12 @@ function TopNav({ user, onSignOut }) {
 
       {/* Right — user identity + actions */}
       <div className={styles.nav_right}>
+
+        {/* Pending invitations page */}
+        <Link to="/invitations" className={styles.signout_btn} aria-label="View invitations">
+          <MailIcon />
+          <span>Invitations</span>
+        </Link>
 
         {/* Username chip with coloured initial */}
         <div className={styles.user_chip} aria-label={`Signed in as ${user?.username}`}>

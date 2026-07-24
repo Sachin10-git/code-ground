@@ -70,6 +70,7 @@ import FileExplorer from '../components/FileExplorer.jsx';
 import { useYjs } from '../hooks/useYjs.js';
 import { useAI } from '../hooks/useAI.js';
 import { useExecution } from '../hooks/useExecution.js';
+import { useRemoteCursors } from '../hooks/useRemoteCursors.js';
 
 /* ─────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -235,23 +236,9 @@ export default function Editor() {
   const [saving,        setSaving]        = useState(false);
   const [saveError,     setSaveError]     = useState('');
 
-  const [peers,      setPeers]      = useState([]);
-
-  useEffect(() => {
-  setPeers([
-    { userId: '1', name: 'Alice',   active: true },
-    { userId: '2', name: 'Bob' },
-    { userId: '3', name: 'Charlie' },
-  ]);
-}, []);
-
-
   // const [output,     setOutput]     = useState(null);
   // const [running,    setRunning]    = useState(false);
   // const [outputOpen, setOutputOpen] = useState(true);
-
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleVal,     setTitleVal]     = useState('');
 
   const editorRef  = useRef(null);
   const monacoRef  = useRef(null);
@@ -264,16 +251,40 @@ export default function Editor() {
   const modelsRef       = useRef(new Map()); // fileId -> monaco.editor.ITextModel
   const viewStatesRef   = useRef(new Map()); // fileId -> ICodeEditorViewState
   const savedContentRef = useRef(new Map()); // fileId -> last content persisted to the backend
+  const savingRef        = useRef(false); // true while a save PATCH is in flight (guards against overlap)
+
+  /* Phase 5: the live MonacoBinding for whichever file is currently
+     open. Only ever one at a time — recreated per file in
+     handleDocReady, disposed on unmount below. */
+  const collabBindingRef = useRef(null);
+
+  /* Phase 5.4: live cursor sync — the emit side only. sendCursorRef
+     mirrors the handleSaveFileRef pattern below — Monaco's cursor
+     listener is bound once at mount, so it needs a stable function
+     that always forwards to the *current* sendCursor from useYjs
+     rather than a closure captured at mount time. The receive/render
+     side (decorations, floating badges) lives entirely in
+     useRemoteCursors — see cursorRendering below. */
+  const sendCursorRef      = useRef(() => {});
+  /* Set once useRemoteCursors is called below (after useYjs) — read via
+     ref rather than a direct closure so openFileInEditor's own identity
+     doesn't have to change every time the hook's return value does. */
+  const cursorRenderingRef = useRef(null);
 
   useEffect(() => { selectedFileRef.current = selectedFile; }, [selectedFile]);
 
-  /* Dispose cached models when the project changes or the page unmounts */
+  /* Dispose cached models (and the live collaboration binding) when
+     the project changes or the page unmounts */
   useEffect(() => {
     return () => {
+      collabBindingRef.current?.destroy();
+      collabBindingRef.current = null;
       modelsRef.current.forEach(model => model.dispose());
       modelsRef.current.clear();
       viewStatesRef.current.clear();
       savedContentRef.current.clear();
+      /* Remote-cursor decorations/widgets are cleaned up by
+         useRemoteCursors's own unmount effect, not here. */
     };
   }, [projectId]);
 
@@ -284,6 +295,45 @@ export default function Editor() {
       next.add(fileId);
       return next;
     });
+  }, []);
+
+  /* Track edits for AI context. Previously fed by the (broken) old
+     Yjs binding; now driven directly off the per-file Monaco model's
+     own content-change event (wired below in openFileInEditor). */
+  const handleEditorUpdate = useCallback((text) => {
+    editLogRef.current = [
+      ...editLogRef.current.slice(-(MAX_EDIT_LOG - 1)),
+      { username: user?.username ?? 'unknown', timestamp: new Date().toISOString(), preview: text.slice(0, 80) },
+    ];
+  }, [user?.username]);
+
+  /* Called by useYjs once a file's collaboration room has applied its
+     initial document sync (so the Y.Doc already reflects the file's
+     real content, not an empty one) — safe to bind Monaco now without
+     y-monaco's initial sync clobbering the model. */
+  const handleDocReady = useCallback(async (doc, fileId) => {
+    if (fileId !== selectedFileRef.current?._id) return; // stale — user already switched away
+
+    const editor = editorRef.current;
+    const model  = modelsRef.current.get(fileId);
+    if (!editor || !model) return;
+
+    collabBindingRef.current?.destroy();
+    collabBindingRef.current = null;
+
+    try {
+      const { MonacoBinding } = await import('y-monaco');
+      /* Re-check after the async import in case the user switched
+         files again while it was loading. */
+      if (fileId !== selectedFileRef.current?._id || editorRef.current !== editor) return;
+      collabBindingRef.current = new MonacoBinding(
+        doc.getText('editor'),
+        model,
+        new Set([editor]),
+      );
+    } catch (e) {
+      console.warn('Collaborative binding unavailable:', e.message);
+    }
   }, []);
 
   /* Loads a file's content into Monaco, creating its model on first
@@ -297,6 +347,15 @@ export default function Editor() {
     const prevFile = selectedFileRef.current;
     if (prevFile && prevFile._id !== file._id) {
       viewStatesRef.current.set(prevFile._id, editor.saveViewState());
+
+      /* Remote-cursor decorations/badges belong to useRemoteCursors —
+         tell it we're leaving this file so it can clear them
+         immediately, before the new model is attached below. */
+      cursorRenderingRef.current?.prepareFileSwitch(
+        prevFile._id,
+        modelsRef.current.get(prevFile._id),
+        editor,
+      );
     }
 
     let model = modelsRef.current.get(file._id);
@@ -308,14 +367,17 @@ export default function Editor() {
       );
       modelsRef.current.set(file._id, model);
       savedContentRef.current.set(file._id, file.content ?? '');
-      model.onDidChangeContent(() => markFileDirty(file._id));
+      model.onDidChangeContent(() => {
+        markFileDirty(file._id);
+        handleEditorUpdate(model.getValue());
+      });
     }
 
     editor.setModel(model);
     const viewState = viewStatesRef.current.get(file._id);
     if (viewState) editor.restoreViewState(viewState);
     editor.focus();
-  }, [markFileDirty]);
+  }, [markFileDirty, handleEditorUpdate]);
 
   const handleSelectFile = useCallback((file) => {
     setSelectedFile(file);
@@ -323,13 +385,23 @@ export default function Editor() {
     openFileInEditor(file);
   }, [openFileInEditor]);
 
-  /* Saves the currently open file's content via the Phase 4 endpoint. */
+  /* Saves the currently open file's content via the Phase 4 endpoint.
+     Guarded by savingRef so two overlapping saves can never be in
+     flight at once — the Save button disables itself while `saving`,
+     but Ctrl/Cmd+S (bound once at mount, see handleEditorMount) calls
+     this directly and isn't subject to that disabled state, so without
+     this guard a rapid double Ctrl+S could fire two PATCH requests
+     whose responses resolve out of order, letting the earlier
+     (staler) request's content overwrite the later, more current one. */
   const handleSaveFile = useCallback(async () => {
+    if (savingRef.current) return;
+
     const file   = selectedFileRef.current;
     const editor = editorRef.current;
     if (!file || !editor) return;
 
     const content = editor.getValue();
+    savingRef.current = true;
     setSaving(true);
     setSaveError('');
     try {
@@ -344,6 +416,7 @@ export default function Editor() {
     } catch (err) {
       setSaveError(err.response?.data?.message || 'Failed to save file.');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }, []);
@@ -366,7 +439,6 @@ export default function Editor() {
       .then(({ data }) => {
         const project = data.data.project;
         setDoc({ title: project.name, language: project.language });
-        setTitleVal(project.name);
       })
       .catch(err => setDocError(
         err.response?.status === 404 ? 'Project not found.' : 'Failed to load project.'
@@ -374,21 +446,35 @@ export default function Editor() {
       .finally(() => setDocLoading(false));
   }, [projectId]);
 
-  /* Track edits for AI context */
-  const handleEditorUpdate = useCallback((text) => {
-    editLogRef.current = [
-      ...editLogRef.current.slice(-(MAX_EDIT_LOG - 1)),
-      { username: user?.username ?? 'unknown', timestamp: new Date().toISOString(), preview: text.slice(0, 80) },
-    ];
-  }, [user?.username]);
+  /* Yjs + Socket.io — one Y.Doc per open file (Phase 5), bound to
+     Monaco via handleDocReady below once the room's initial sync has
+     applied. */
+  const {
+    connected, peers, getText, replaceText, cursors, sendCursor, typingSocketIds,
+  } = useYjs({
+    fileId:     selectedFileId,
+    user,
+    onDocReady: handleDocReady,
+  });
 
-  /* Yjs + Socket.io */
-const { ydocRef, awarenessRef, bindingRef, connected, getText, replaceText } = useYjs({
-  docId,
-  user,
-  onUpdate:      handleEditorUpdate,
-  onPeersChange: setPeers,
-});
+  useEffect(() => { sendCursorRef.current = sendCursor; }, [sendCursor]);
+
+  /* Phase 5.4/5.5: remote-cursor rendering (caret, selection highlight,
+     floating username badge, typing indicator) — extracted into
+     useRemoteCursors so this component stays focused on editor/file
+     lifecycle. See that hook for the full explanation of the Monaco
+     APIs involved; this call just wires it to the current editor/model
+     refs and the already-synchronized `cursors`/`typingSocketIds`
+     state from useYjs above. */
+  const cursorRendering = useRemoteCursors({
+    editorRef,
+    monacoRef,
+    cursors,
+    typingSocketIds,
+    selectedFileId,
+    currentUserId: user?.id,
+  });
+  useEffect(() => { cursorRenderingRef.current = cursorRendering; }, [cursorRendering]);
 
 const { messages: aiMessages, loading: aiLoading, send: sendAI,
         clearHistory: clearAIHistory, contextNote } = useAI({ peers });
@@ -436,25 +522,32 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI,
       () => handleSaveFileRef.current(),
     );
 
+    /* Phase 5.4: broadcast our own cursor position (and selection, if
+       any) to the room whenever either changes — bound once here (not
+       per-file) since the editor instance is stable across file
+       switches; sendCursorRef always points at whichever file's room
+       is currently joined. onDidChangeCursorSelection (rather than
+       onDidChangeCursorPosition) fires for both a plain caret move and
+       a real text selection, and its Selection object's start/end
+       fields are already normalized (start <= end) regardless of drag
+       direction — exactly what's needed to also render remote
+       selection highlights. Fires for any change, including ones
+       caused by an incoming remote edit shifting our cursor — that's
+       still our real current position, so still worth reporting. */
+    editor.onDidChangeCursorSelection((e) => {
+      const sel = e.selection;
+      const position  = { lineNumber: sel.positionLineNumber, column: sel.positionColumn };
+      const selection = sel.isEmpty() ? null : {
+        startLineNumber: sel.startLineNumber, startColumn: sel.startColumn,
+        endLineNumber:   sel.endLineNumber,   endColumn:   sel.endColumn,
+      };
+      sendCursorRef.current({ position, selection });
+    });
+
     /* If a file was already selected before Monaco finished mounting,
        load it now. */
     if (selectedFileRef.current) openFileInEditor(selectedFileRef.current);
   }, [openFileInEditor]);
-
-  /* Save title on blur or Enter */
-  async function saveTitle() {
-    setEditingTitle(false);
-    const newTitle = titleVal.trim();
-    if (!newTitle || newTitle === doc?.title) return;
-    try {
-      const { data } = await api.put(`/documents/${docId}`, {
-    title: newTitle,
-    language: doc.language,
-    content: getText(),
-});
-      setDoc(d => ({ ...d, title: data.title }));
-    } catch { setTitleVal(doc?.title ?? ''); }
-  }
 
   /* Run code in Docker sandbox */
   // async function handleRun() {
@@ -618,18 +711,14 @@ function handleAISend(question) {
     <Navbar 
       title={doc?.title}
       onTitleChange={async (newTitle) => {
-        const { data } = await api.patch(`/documents/${docId}`, { title: newTitle });
-        setDoc(d => ({ ...d, title: data.title }));
+        const { data } = await api.patch(`/projects/${projectId}`, { name: newTitle });
+        setDoc(d => ({ ...d, title: data.data.name }));
       }}
       docLoading={docLoading}
       language={doc?.language}
       onLanguageChange={async (newLang) => {
-        const { data } = await api.put(`/documents/${docId}`, {
-    title: doc.title,
-    language: newLang,
-    content: getText(),
-});
-        setDoc(d => ({ ...d, language: data.language ?? newLang }));
+        const { data } = await api.patch(`/projects/${projectId}`, { language: newLang });
+        setDoc(d => ({ ...d, language: data.data.language ?? newLang }));
       }}
       connected={connected}
       currentUser={user}

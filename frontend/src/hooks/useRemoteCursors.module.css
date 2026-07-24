@@ -1,0 +1,161 @@
+/*
+ * useRemoteCursors.module.css — remote collaborator cursor rendering
+ *
+ * Three pieces per collaborator, two Monaco rendering mechanisms (see
+ * useRemoteCursors.js):
+ *
+ *   .caret_N              — Monaco decoration `before` injected text.
+ *   .selection_N          — Monaco decoration `className` over a range.
+ *   .badge / .badge_N     — a Content Widget DOM node, positioned by
+ *                            Monaco above the caret's line.
+ *
+ * Plus one cross-cutting state, applied on top of the above for as
+ * long as that collaborator is actively typing:
+ *
+ *   .caret_typing          — gentle blink on the caret itself.
+ *   .badge_typing          — small pulsing dot on the badge.
+ *
+ * 8 fixed color slots (see utils/collaboratorColor.js) — same palette
+ * as the app's presence-chip avatars, so a collaborator's cursor and
+ * their chip match. All view-layer only: nothing here ever touches the
+ * document model's text.
+ */
+
+@keyframes remote_cursor_fade_in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Caret ──────────────────────────────────────────────────────────
+   A prominent 2px colored vertical bar spanning ~one editor line.
+   `--remote-cursor-line-height` is set in JS from the editor's own
+   *measured* line height (useRemoteCursors.js), so this tracks the
+   real font size / line-height settings instead of an approximation;
+   the fallback (1.3em) only applies before that first measurement. */
+.caret_0, .caret_1, .caret_2, .caret_3,
+.caret_4, .caret_5, .caret_6, .caret_7 {
+  display: inline-block;
+  position: relative;
+  width: 2px;
+  height: var(--remote-cursor-line-height, 1.3em);
+  margin-left: -1px;
+  vertical-align: middle;
+  border-radius: 1px;
+  z-index: 20;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+  animation: remote_cursor_fade_in 0.12s ease-out;
+}
+
+.caret_0 { background: #3B82F6; box-shadow: 0 0 5px 0 #3B82F6; }
+.caret_1 { background: #22D3EE; box-shadow: 0 0 5px 0 #22D3EE; }
+.caret_2 { background: #34D399; box-shadow: 0 0 5px 0 #34D399; }
+.caret_3 { background: #F59E0B; box-shadow: 0 0 5px 0 #F59E0B; }
+.caret_4 { background: #EC4899; box-shadow: 0 0 5px 0 #EC4899; }
+.caret_5 { background: #8B5CF6; box-shadow: 0 0 5px 0 #8B5CF6; }
+.caret_6 { background: #F87171; box-shadow: 0 0 5px 0 #F87171; }
+.caret_7 { background: #60A5FA; box-shadow: 0 0 5px 0 #60A5FA; }
+
+/* ── Typing indicator (Phase 5.5) ──────────────────────────────────
+   Applied on top of a .caret_N / .badge_N class — never on its own —
+   for as long as that collaborator's socketId is in `typingSocketIds`.
+   Reuses the already-synchronized typing signal (useYjs.js); nothing
+   here talks to the network. Gentle by design: the caret never fully
+   vanishes mid-blink (0.4 floor, not 0) and the dot's pulse is a small
+   scale/opacity wobble, not a flash — meant to be noticed, not to
+   distract from the text next to it. */
+@keyframes remote_caret_blink {
+  0%, 100% { opacity: 1;   }
+  50%      { opacity: 0.4; }
+}
+
+.caret_typing {
+  animation: remote_cursor_fade_in 0.12s ease-out, remote_caret_blink 1s ease-in-out infinite;
+}
+
+@keyframes remote_typing_dot_pulse {
+  0%, 100% { transform: scale(1);    opacity: 1;    }
+  50%      { transform: scale(1.35); opacity: 0.55; }
+}
+
+/* ── Selection highlight ───────────────────────────────────────────
+   Semi-transparent tint over the actual selected range (not the
+   zero-width caret point) — can span multiple characters or lines. */
+.selection_0 { background-color: rgba(59, 130, 246, 0.25); }
+.selection_1 { background-color: rgba(34, 211, 238, 0.25); }
+.selection_2 { background-color: rgba(52, 211, 153, 0.25); }
+.selection_3 { background-color: rgba(245, 158, 11, 0.25); }
+.selection_4 { background-color: rgba(236, 72, 153, 0.25); }
+.selection_5 { background-color: rgba(139, 92, 246, 0.25); }
+.selection_6 { background-color: rgba(248, 113, 113, 0.25); }
+.selection_7 { background-color: rgba(96, 165, 250, 0.25); }
+
+/* ── Floating username badge ───────────────────────────────────────
+   A Content Widget DOM node — not decoration text — positioned by
+   Monaco (ContentWidgetPositionPreference.ABOVE) above the caret's
+   line. `margin-bottom` holds it visibly clear of the caret rather
+   than touching it. `transition` is what makes it glide to a new spot
+   instead of jumping: Monaco repositions this same node (not a fresh
+   one) on every update, so the transition has continuity to animate. */
+.badge {
+  position: absolute;
+  margin-bottom: 4px;
+  padding: 2px 7px 3px;
+  border-radius: 4px 4px 4px 2px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 15px;
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  z-index: 30;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
+  transition: top 0.1s linear, left 0.1s linear, transform 0.1s linear;
+  animation: remote_cursor_fade_in 0.15s ease-out;
+}
+
+.badge_0 { background: #3B82F6; }
+.badge_1 { background: #22D3EE; }
+.badge_2 { background: #34D399; }
+.badge_3 { background: #F59E0B; }
+.badge_4 { background: #EC4899; }
+.badge_5 { background: #8B5CF6; }
+.badge_6 { background: #F87171; }
+.badge_7 { background: #60A5FA; }
+
+/* Typing state on the badge — a small pulsing dot ahead of the name,
+   e.g. "● Alice" rather than a second DOM node the JS side would have
+   to create/track; the class toggle in useRemoteCursors.js is the only
+   DOM write, the dot itself is pure CSS (::before). */
+.badge_typing {
+  padding-left: 15px;
+}
+
+.badge_typing::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: remote_typing_dot_pulse 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret_0, .caret_1, .caret_2, .caret_3,
+  .caret_4, .caret_5, .caret_6, .caret_7,
+  .caret_typing,
+  .badge,
+  .badge_typing::before {
+    animation: none;
+    transition: none;
+  }
+}

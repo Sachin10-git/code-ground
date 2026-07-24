@@ -91,6 +91,26 @@ const inviteMember = async (
 
 /**
  * -------------------------------------------------------
+ * Get Pending Invitations (for the authenticated user)
+ * -------------------------------------------------------
+ */
+
+const getPendingInvitations = async (userEmail) => {
+
+    const invitations = await Invitation.find({
+        inviteeEmail: userEmail,
+        status: "pending"
+    })
+        .sort({ createdAt: -1 })
+        .populate("projectId", "name")
+        .populate("inviterId", "username email");
+
+    return invitations;
+
+};
+
+/**
+ * -------------------------------------------------------
  * Accept Invitation
  * -------------------------------------------------------
  */
@@ -235,6 +255,7 @@ const rejectInvitation = async (
 
 module.exports = {
     inviteMember,
+    getPendingInvitations,
     acceptInvitation,
     rejectInvitation
 };

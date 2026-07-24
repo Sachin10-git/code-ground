@@ -1,187 +1,182 @@
 /**
- * useYjs.js — Code Ground real-time collaboration engine
+ * useYjs.js — Code Ground real-time collaboration engine (Phase 5)
  *
- * Extracted from the inline useYjs hook in Editor.jsx. This is the
- * single piece of code responsible for making multiple people see
- * the same document update live, with live cursors and presence.
+ * One Y.Doc per FILE, never per project. The collaboration room
+ * identity is the file's `_id`, matching the backend's already-generic
+ * roomId-keyed CRDT system (backend/src/socket/socketEvents.js +
+ * backend/src/crdt/*). Room membership (`peers`) is tracked via the
+ * existing room:user-joined/room:user-left events (Phase 5.2). Each
+ * peer's `active` (editing vs. viewing) flag is driven by the
+ * editor:typing-start/stop + editor:user-typing/stopped-typing events
+ * (Phase 5.3). Live cursor positions (Phase 5.4) are tracked the same
+ * way — editor:cursor-move/cursor-updated — deliberately outside the
+ * Y.Doc: cursor position is ephemeral view state, not document content,
+ * so it's never part of a CRDT update and never persisted.
  *
- * ── What this hook does ──────────────────────────────────────────────
+ * `typingSocketIds` (Phase 5.5) reuses the same editor:user-typing /
+ * editor:user-stopped-typing events Presence already consumed as a
+ * blunt "someone is typing" boolean — since those events carry a real
+ * socketId, and `cursors` is already keyed by socketId, the rendering
+ * layer can attribute "is typing" to one specific remote cursor rather
+ * than applying it to every peer. No new socket event, no polling.
  *
- *   1. Creates a Yjs CRDT document (Y.Doc) — the shared, conflict-free
- *      data structure that holds the document's text content.
- *   2. Creates a Yjs Awareness instance — ephemeral shared state for
- *      things that aren't part of the document itself: who's online,
- *      their name/colour, cursor position.
- *   3. Opens a Socket.io connection to the backend's real-time relay
- *      and wires up four message types in each direction:
- *        - sync-step-1   (server → us)   initial document snapshot
- *        - sync-update   (both ways)     incremental document changes
- *        - awareness-update (both ways)  presence/cursor changes
- *        - user-left     (server → us)   someone disconnected
- *   4. Exposes refs to the Yjs doc, awareness, and the MonacoBinding
- *      (set by the caller once Monaco mounts) so the parent component
- *      can wire up the editor and perform operations like snapshot
- *      restore (replacing the document's text content directly).
- *   5. Automatically reconnects with exponential backoff if the
- *      connection drops, and exposes `connected` so the UI can show
- *      a live status indicator.
- *   6. Cleans up everything (socket, awareness, doc, binding) when
- *      the component unmounts or docId/user changes.
+ * ── Two independent lifecycles ───────────────────────────────────────
  *
- * ── What this hook does NOT do ───────────────────────────────────────
+ *   1. The Socket.IO connection — created once per editor session
+ *      (keyed by `user`) and kept alive across file switches.
+ *   2. The per-file room — a fresh Y.Doc is created and the file's
+ *      room is joined whenever `fileId` changes; the previous room is
+ *      left and its Y.Doc destroyed first. This is what makes
+ *      switching files "leave old room, join new room" instead of
+ *      reconnecting the whole socket.
  *
- *   - It does NOT touch Monaco directly. The caller is responsible
- *     for creating the MonacoBinding once the editor mounts, using
- *     the exposed `ydocRef` and `awarenessRef`, and storing it back
- *     into `bindingRef.current` so this hook can clean it up later.
- *   - It does NOT decide what `onUpdate`/`onPeersChange` DO with the
- *     data — those are plain callbacks supplied by the caller.
+ * ── Usage ────────────────────────────────────────────────────────────
  *
- * ── Why dynamic imports ───────────────────────────────────────────────
- *
- *   yjs, socket.io-client, and y-protocols are only needed once a
- *   document is actually opened. Importing them eagerly at the top
- *   of Editor.jsx would bloat the initial bundle for every page that
- *   isn't the editor (Landing, Login, Dashboard, etc). Dynamic import
- *   means these libraries are fetched only when useYjs actually runs.
- *
- * ── Return value ─────────────────────────────────────────────────────
- *
- *   {
- *     ydocRef:      RefObject<Y.Doc | null>       — the shared document
- *     awarenessRef: RefObject<Awareness | null>   — presence/cursor state
- *     bindingRef:   RefObject<MonacoBinding | null> — set this yourself
- *                                                      once Monaco mounts
- *     connected:    boolean                        — live connection status
- *     getText:      () => string                   — current doc content,
- *                                                      '' if not ready yet
- *     replaceText:  (newText: string) => void       — atomically replaces
- *                                                      the document content
- *                                                      (used for snapshot
- *                                                      restore)
- *   }
- *
- * ── Usage in Editor.jsx ─────────────────────────────────────────────
- *
- *   import { useYjs } from '../hooks/useYjs.js';
- *
- *   const {
- *     ydocRef, awarenessRef, bindingRef, connected, getText, replaceText,
- *   } = useYjs({
- *     docId,
+ *   const { connected, peers, getText, replaceText } = useYjs({
+ *     fileId: selectedFile?._id,
  *     user,
- *     onUpdate:      handleEditorUpdate,   // (text: string) => void
- *     onPeersChange: setPeers,             // (peers: Array) => void
+ *     onDocReady: (doc, fileId) => { ...create/replace MonacoBinding... },
  *   });
  *
- *   // `connected` replaces the old separately-managed `connected` state —
- *   // you can delete your own useState(false) for it and just use this.
- *
- *   // In handleEditorMount, after creating the MonacoBinding:
- *   bindingRef.current = new MonacoBinding(ytext, model, new Set([editor]), awarenessRef.current);
- *
- *   // In handleRestoreSnapshot, instead of manually reaching into
- *   // ydocRef.current.getText('content'), just call:
- *   replaceText(snapshot.content);
+ *   `onDocReady` fires once the room's initial document-sync has been
+ *   applied to the (freshly created) Y.Doc — i.e. once it already
+ *   reflects the file's real content — so the caller can safely bind
+ *   Monaco to it without y-monaco's initial sync clobbering the model
+ *   back to an empty string.
  */
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 
 /* ─────────────────────────────────────────────────────────────────────
-   AVATAR COLOR — deterministic colour from a username string.
-   Same algorithm used across every other file in the app (Presence,
-   Navbar, AIMessage, Dashboard) so a given user is always the same
-   colour everywhere, including in their own Yjs awareness state.
+   SOCKET EVENT NAMES — must match backend/src/socket/socketConstants.js
+   exactly. (The previous version of this hook used made-up event names
+   that never matched the backend, so collaboration never actually
+   worked; these are the real ones.)
 ───────────────────────────────────────────────────────────────────── */
-const AVATAR_COLORS = [
-  '#3B82F6', '#22D3EE', '#34D399', '#F59E0B',
-  '#EC4899', '#8B5CF6', '#F87171', '#60A5FA',
-];
+const SOCKET_EVENTS = {
+  ROOM_JOIN:           'room:join',
+  ROOM_LEAVE:          'room:leave',
+  USER_JOINED:         'room:user-joined',
+  USER_LEFT:           'room:user-left',
+  FILE_CHANGE:         'editor:file-change',
+  FILE_UPDATED:        'editor:file-updated',
+  DOCUMENT_SYNC:       'editor:document-sync',
+  TYPING_START:        'editor:typing-start',
+  TYPING_STOP:         'editor:typing-stop',
+  USER_TYPING:         'editor:user-typing',
+  USER_STOPPED_TYPING: 'editor:user-stopped-typing',
+  CURSOR_MOVE:         'editor:cursor-move',
+  CURSOR_UPDATED:      'editor:cursor-updated',
+};
 
-function avatarColor(name = '') {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) {
-    h = name.charCodeAt(i) + ((h << 5) - h);
-  }
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+/* Cap outgoing cursor-position emits to ~30fps (the low end of the
+   30-60fps range) so rapid mouse/keyboard cursor movement never floods
+   the socket — trailing-edge so the final position is never dropped. */
+const CURSOR_THROTTLE_MS = 33;
+
+function createCursorThrottle(fn, wait) {
+  let lastRun = 0;
+  let timer = null;
+  let pendingArg = null;
+
+  const flush = () => {
+    timer = null;
+    lastRun = Date.now();
+    fn(pendingArg);
+    pendingArg = null;
+  };
+
+  const throttled = (arg) => {
+    pendingArg = arg;
+    const elapsed = Date.now() - lastRun;
+    if (elapsed >= wait) {
+      if (timer) { clearTimeout(timer); }
+      flush();
+    } else if (!timer) {
+      timer = setTimeout(flush, wait - elapsed);
+    }
+  };
+
+  throttled.cancel = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    pendingArg = null;
+  };
+
+  return throttled;
 }
 
-/* ─────────────────────────────────────────────────────────────────────
-   RECONNECT BACKOFF — how long to wait before each retry attempt.
-   Starts fast (1s) so brief network blips recover quickly, then
-   backs off to avoid hammering the server if it's genuinely down.
-   Caps at 10s rather than growing unbounded.
-───────────────────────────────────────────────────────────────────── */
+/* Reconnect backoff — same schedule as before: fast first retry,
+   capped growth so a genuinely down server isn't hammered. */
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 10000];
 
-/* ─────────────────────────────────────────────────────────────────────
-   useYjs — the hook.
-───────────────────────────────────────────────────────────────────── */
-export function useYjs({ docId, user, onUpdate, onPeersChange }) {
-  const ydocRef      = useRef(null);
-  const socketRef    = useRef(null);
-  const awarenessRef = useRef(null);
-  const bindingRef   = useRef(null);
+/* How long after the last keystroke to tell the room we've stopped
+   typing — also what governs how long the Phase 5.5 typing indicator
+   (blinking caret / pulsing badge dot) stays on after the last
+   keystroke before fading out. */
+const TYPING_STOP_DELAY = 1500;
 
-  /* Tracks how many reconnect attempts have happened since the last
-     successful connection — resets to 0 on every successful connect. */
+export function useYjs({ fileId, user, onDocReady }) {
+  const socketRef = useRef(null);
+  const ydocRef   = useRef(null);
+  const YRef      = useRef(null); // cached `yjs` module namespace
+
+  /* Set inside the per-file room effect below to a throttled emitter
+     bound to the current socket + fileId; cleared on room cleanup.
+     Indirected through a ref (rather than returning the throttled
+     function directly) so callers always reach the *current* file's
+     room instead of a stale closure from a file that's since changed. */
+  const sendCursorRef = useRef(null);
+
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef   = useRef(null);
 
-  const [connected, setConnected] = useState(false);
+  const onDocReadyRef = useRef(onDocReady);
+  useEffect(() => { onDocReadyRef.current = onDocReady; }, [onDocReady]);
 
+  const [connected,       setConnected]       = useState(false);
+  const [peersRoster,     setPeersRoster]     = useState([]); // [{ userId, name }]
+  const [typingSocketIds, setTypingSocketIds] = useState(() => new Set());
+  /* Remote live-cursor positions for the current file room, keyed by
+     socketId (not userId — each connection has its own caret).
+     { [socketId]: { userId, username, position: {lineNumber, column} } } */
+  const [cursors, setCursors] = useState({});
+
+  /* The backend's editor:user-typing/stopped-typing events identify the
+     typist by socketId, not userId, and peers are keyed by userId (see
+     onRoomUsers below) — there's no payload linking the two. With this
+     app's small per-file room sizes, "someone besides me is typing" is
+     applied to every peer rather than attributed to one specific peer. */
+  const peers = useMemo(
+    () => peersRoster.map(p => ({ ...p, active: typingSocketIds.size > 0 })),
+    [peersRoster, typingSocketIds]
+  );
+
+  /* ── Socket connection: one per editor session, independent of
+     which file is currently open. Only re-created if the user
+     changes (e.g. re-login). ── */
   useEffect(() => {
-    if (!docId || !user) return;
+    if (!user) return;
     let cancelled = false;
 
-    /* Holds the Y namespace once loaded, so getText/replaceText
-       (defined below, outside this effect) can use Y.applyUpdate
-       and friends without re-importing. */
-    let YRef = null;
-
     async function init() {
-      /* Dynamic imports — keeps these heavy deps out of the main
-         bundle until a document is actually opened. */
-      const [Y, socketIOModule, awarenessModule] = await Promise.all([
+      const [Y, socketIOModule] = await Promise.all([
         import('yjs'),
         import('socket.io-client'),
-        import('y-protocols/awareness.js'),
       ]);
-
       if (cancelled) return;
+      YRef.current = Y;
 
-      YRef = Y;
       const { io } = socketIOModule;
-      const { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate } = awarenessModule;
 
-      /* ── Yjs document + awareness ── */
-      const ydoc      = new Y.Doc();
-      const awareness = new Awareness(ydoc);
-      ydocRef.current      = ydoc;
-      awarenessRef.current = awareness;
-
-      /* Publish our own presence — name, colour, stable id */
-      awareness.setLocalStateField('user', {
-        name:   user.username,
-        color:  avatarColor(user.username),
-        userId: user.id ?? user.username,
-      });
-
-      /* ── Socket.io connection ──
-         Wrapped in try/catch: if socket.io-client throws synchronously
-         (e.g. malformed URL, environment issue), fail gracefully rather
-         than crashing the whole Editor page. Collaboration simply won't
-         work, but the editor itself remains usable solo. */
       let socket;
       try {
         const token = localStorage.getItem('cg_token');
         socket = io('/', {
-          auth:               { token },
-          transports:         ['websocket'],
-          /* We manage our own reconnect/backoff below for full control
-             over the `connected` state and attempt counting, rather
-             than relying on socket.io's built-in reconnection. */
-          reconnection:        false,
+          auth:         { token },
+          transports:   ['websocket'],
+          /* Manual reconnect/backoff below, same as before, for full
+             control over `connected` and attempt counting. */
+          reconnection: false,
         });
       } catch (e) {
         console.warn('Socket.io connection skipped:', e.message);
@@ -195,7 +190,6 @@ export function useYjs({ docId, user, onUpdate, onPeersChange }) {
         const attempt = reconnectAttemptRef.current;
         const delayMs = RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)];
         reconnectAttemptRef.current = attempt + 1;
-
         reconnectTimerRef.current = setTimeout(() => {
           if (cancelled) return;
           socket.connect();
@@ -206,7 +200,6 @@ export function useYjs({ docId, user, onUpdate, onPeersChange }) {
         if (cancelled) return;
         setConnected(true);
         reconnectAttemptRef.current = 0;
-        socket.emit('join-document', { docId });
       });
 
       socket.on('disconnect', () => {
@@ -220,68 +213,10 @@ export function useYjs({ docId, user, onUpdate, onPeersChange }) {
         setConnected(false);
         scheduleReconnect();
       });
-
-      /* ── Incoming Yjs sync ── */
-
-      /* Initial snapshot when we first join the document room */
-      socket.on('sync-step-1', ({ update }) => {
-        if (update) Y.applyUpdate(ydoc, new Uint8Array(update));
-      });
-
-      /* Incremental updates from other collaborators */
-      socket.on('sync-update', ({ update }) => {
-        Y.applyUpdate(ydoc, new Uint8Array(update), 'remote');
-      });
-
-      /* ── Incoming awareness (presence/cursors) ── */
-      socket.on('awareness-update', ({ update }) => {
-        applyAwarenessUpdate(awareness, new Uint8Array(update), 'server');
-      });
-
-      /* Someone disconnected — remove them from the peer list
-         immediately rather than waiting for an awareness timeout */
-      socket.on('user-left', ({ userId }) => {
-        if (cancelled) return;
-        onPeersChange?.(prev =>
-          Array.isArray(prev) ? prev.filter(p => p.userId !== userId) : prev
-        );
-      });
-
-      /* ── Outgoing Yjs sync ──
-         Every local edit (origin !== 'remote') is broadcast to the
-         server, which relays it to other connected clients. */
-      ydoc.on('update', (update, origin) => {
-        if (origin === 'remote') return; /* don't echo back what we just received */
-        socket.emit('sync-update', { docId, update: Array.from(update) });
-        onUpdate?.(ydoc.getText('content').toString());
-      });
-
-      /* ── Outgoing awareness ──
-         Every local presence change (cursor move, etc.) is broadcast,
-         and we also rebuild our local peer list from the full
-         awareness state so the UI's presence list stays accurate. */
-      awareness.on('change', () => {
-        const update = encodeAwarenessUpdate(
-          awareness,
-          Array.from(awareness.getStates().keys())
-        );
-        socket.emit('awareness-update', { docId, update: Array.from(update) });
-
-        const peers = [];
-        awareness.getStates().forEach((state, clientId) => {
-          if (clientId !== awareness.clientID && state.user) peers.push(state.user);
-        });
-        if (!cancelled) onPeersChange?.(peers);
-      });
     }
 
-    init().catch(err => console.warn('Yjs init error:', err));
+    init().catch(err => console.warn('Yjs socket init error:', err));
 
-    /* ── Cleanup ──
-       Runs on unmount AND whenever docId/user.id changes (e.g.
-       navigating from one document to another without a full
-       page reload) — tears down the old session completely before
-       the effect re-runs for the new one. */
     return () => {
       cancelled = true;
 
@@ -291,42 +226,233 @@ export function useYjs({ docId, user, onUpdate, onPeersChange }) {
       }
       reconnectAttemptRef.current = 0;
 
-      bindingRef.current?.destroy();
-      bindingRef.current = null;
-
-      awarenessRef.current?.destroy();
-      awarenessRef.current = null;
-
       socketRef.current?.disconnect();
       socketRef.current = null;
-
-      ydocRef.current?.destroy();
-      ydocRef.current = null;
-
       setConnected(false);
     };
-  }, [docId, user?.id]);
+  }, [user?.id]);
 
-  /* ── getText ──
-     Reads the current document content. Returns '' if the Yjs doc
-     hasn't initialised yet (e.g. called during the brief window
-     before the dynamic imports resolve). */
-  const getText = useCallback(() => {
-    if (!ydocRef.current) return '';
-    return ydocRef.current.getText('content').toString();
+  /* ── Per-file room: a fresh Y.Doc for the currently open file.
+     Runs again every time `fileId` changes — the cleanup below leaves
+     the previous room and destroys its Y.Doc before the new one joins,
+     so switching files never leaves a stale subscription behind. ── */
+  useEffect(() => {
+    if (!fileId || !connected) return;
+
+    const Y      = YRef.current;
+    const socket = socketRef.current;
+    if (!Y || !socket) return;
+
+    let cancelled = false;
+    const doc = new Y.Doc();
+    ydocRef.current = doc;
+
+    function onDocumentSync(update) {
+      if (cancelled) return;
+      Y.applyUpdate(doc, new Uint8Array(update), 'remote');
+      onDocReadyRef.current?.(doc, fileId);
+    }
+
+    function onFileUpdated({ update }) {
+      if (cancelled) return;
+      Y.applyUpdate(doc, new Uint8Array(update), 'remote');
+    }
+
+    /* Room membership — USER_JOINED/USER_LEFT both carry the full,
+       de-duplicated list of users currently in the room (see backend
+       roomManager.getRoomUsers), so each event just replaces `peers`
+       wholesale rather than patching it. The current user is excluded
+       since Presence renders them separately as "you". */
+    function onRoomUsers(users) {
+      if (cancelled) return;
+      const roster = users || [];
+      setPeersRoster(
+        roster
+          .filter(u => u.userId !== user?.id)
+          .map(u => ({ userId: u.userId, name: u.username || u.email }))
+      );
+
+      /* A user who is no longer in the room roster can't still have a
+         live cursor here — drop it immediately rather than waiting for
+         a cursor-specific "they left" event. Covers both an explicit
+         room leave and a plain disconnect, since both paths emit
+         USER_LEFT with the fresh roster (see socketEvents.js). */
+      const stillPresent = new Set(roster.map(u => u.userId));
+      let survivingCursorSocketIds; // filled in synchronously by the updater below
+      setCursors(prev => {
+        let changed = false;
+        const next = {};
+        for (const [socketId, c] of Object.entries(prev)) {
+          if (stillPresent.has(c.userId)) {
+            next[socketId] = c;
+          } else {
+            changed = true;
+          }
+        }
+        survivingCursorSocketIds = new Set(Object.keys(next));
+        return changed ? next : prev;
+      });
+
+      /* Same idea for the typing indicator (Phase 5.5): USER_TYPING/
+         USER_STOPPED_TYPING carry only a socketId, not a userId (see
+         onUserTyping/onUserStoppedTyping below), so typingSocketIds has
+         no roster of its own to prune against directly. A socket that's
+         actively typing is, by definition, also moving its cursor —
+         every keystroke shifts the caret — so it will always have a
+         live entry in `cursors` while genuinely connected; reusing that
+         (just-pruned) socketId set as the source of truth here needs no
+         new signal and handles the one real gap in this feature: a hard
+         disconnect (crash, network drop) that never gets the chance to
+         emit an explicit TYPING_STOP, which would otherwise leave a
+         "typing" indicator stuck on for a peer who's no longer there. */
+      setTypingSocketIds(prev => {
+        if (!survivingCursorSocketIds) return prev;
+        let changed = false;
+        const next = new Set();
+        for (const socketId of prev) {
+          if (survivingCursorSocketIds.has(socketId)) {
+            next.add(socketId);
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+
+    /* Someone else in the room moved their cursor (or selection). Never
+       our own — the backend broadcasts via socket.to(roomId), which
+       excludes the sender by construction. `cursor` is `{ position,
+       selection }` — see Editor.jsx's onDidChangeCursorSelection —
+       `selection` is null when it's just a caret, no real selection. */
+    function onCursorUpdated({ socketId, userId, username, cursor }) {
+      if (cancelled || !cursor?.position) return;
+      setCursors(prev => ({
+        ...prev,
+        [socketId]: { userId, username, position: cursor.position, selection: cursor.selection ?? null },
+      }));
+    }
+
+    /* Typing indicator — someone else in the room started/stopped
+       typing. Tracked by socketId (see peers useMemo above for why). */
+    function onUserTyping({ socketId }) {
+      if (cancelled) return;
+      setTypingSocketIds(prev => {
+        if (prev.has(socketId)) return prev;
+        const next = new Set(prev);
+        next.add(socketId);
+        return next;
+      });
+    }
+
+    function onUserStoppedTyping({ socketId }) {
+      if (cancelled) return;
+      setTypingSocketIds(prev => {
+        if (!prev.has(socketId)) return prev;
+        const next = new Set(prev);
+        next.delete(socketId);
+        return next;
+      });
+    }
+
+    /* Local typing state — plain closure variables scoped to this
+       effect run (a fresh one per file/room join), not refs, since
+       they never need to survive past this room's own cleanup. */
+    let isTyping = false;
+    let typingStopTimer = null;
+
+    /* Every local edit (origin !== 'remote') is broadcast to the room,
+       and also drives our own typing-start/stop emissions. */
+    function onLocalUpdate(update, origin) {
+      if (origin === 'remote') return;
+      /* Send the raw Uint8Array — Socket.IO transmits typed arrays as a
+         binary attachment. Array.from(update) previously sent a plain
+         number array instead, which arrives on the backend without a
+         real .buffer/.byteOffset, making Y.applyUpdate throw there
+         (see liveUpdateManager.js) and silently drop every remote sync. */
+      socket.emit(SOCKET_EVENTS.FILE_CHANGE, { roomId: fileId, update });
+
+      if (!isTyping) {
+        isTyping = true;
+        socket.emit(SOCKET_EVENTS.TYPING_START, fileId);
+      }
+      if (typingStopTimer) clearTimeout(typingStopTimer);
+      typingStopTimer = setTimeout(() => {
+        isTyping = false;
+        socket.emit(SOCKET_EVENTS.TYPING_STOP, fileId);
+      }, TYPING_STOP_DELAY);
+    }
+    doc.on('update', onLocalUpdate);
+
+    socket.on(SOCKET_EVENTS.DOCUMENT_SYNC, onDocumentSync);
+    socket.on(SOCKET_EVENTS.FILE_UPDATED, onFileUpdated);
+    socket.on(SOCKET_EVENTS.USER_JOINED, onRoomUsers);
+    socket.on(SOCKET_EVENTS.USER_LEFT, onRoomUsers);
+    socket.on(SOCKET_EVENTS.USER_TYPING, onUserTyping);
+    socket.on(SOCKET_EVENTS.USER_STOPPED_TYPING, onUserStoppedTyping);
+    socket.on(SOCKET_EVENTS.CURSOR_UPDATED, onCursorUpdated);
+    socket.emit(SOCKET_EVENTS.ROOM_JOIN, fileId);
+
+    /* Throttled cursor-position emitter for this file's room. Position
+       + (optional) selection metadata only — never editor content —
+       and this room's own socket.emit, not a new connection. `cursor`
+       is opaque to the backend (see cursorManager.js — it never
+       inspects the shape), so carrying `{ position, selection }`
+       instead of a flat `{lineNumber, column}` needs no backend or
+       socket-event change at all. */
+    const throttledSendCursor = createCursorThrottle((cursorData) => {
+      socket.emit(SOCKET_EVENTS.CURSOR_MOVE, { roomId: fileId, cursor: cursorData });
+    }, CURSOR_THROTTLE_MS);
+    sendCursorRef.current = throttledSendCursor;
+
+    return () => {
+      cancelled = true;
+
+      doc.off('update', onLocalUpdate);
+      if (typingStopTimer) clearTimeout(typingStopTimer);
+      if (isTyping) socket.emit(SOCKET_EVENTS.TYPING_STOP, fileId);
+
+      socket.off(SOCKET_EVENTS.DOCUMENT_SYNC, onDocumentSync);
+      socket.off(SOCKET_EVENTS.FILE_UPDATED, onFileUpdated);
+      socket.off(SOCKET_EVENTS.USER_JOINED, onRoomUsers);
+      socket.off(SOCKET_EVENTS.USER_LEFT, onRoomUsers);
+      socket.off(SOCKET_EVENTS.USER_TYPING, onUserTyping);
+      socket.off(SOCKET_EVENTS.USER_STOPPED_TYPING, onUserStoppedTyping);
+      socket.off(SOCKET_EVENTS.CURSOR_UPDATED, onCursorUpdated);
+      socket.emit(SOCKET_EVENTS.ROOM_LEAVE, fileId);
+      setPeersRoster([]);
+      setTypingSocketIds(new Set());
+      setCursors({});
+
+      throttledSendCursor.cancel();
+      if (sendCursorRef.current === throttledSendCursor) sendCursorRef.current = null;
+
+      doc.destroy();
+      if (ydocRef.current === doc) ydocRef.current = null;
+    };
+  }, [fileId, connected, user?.id]);
+
+  /* Stable across renders — always forwards to whichever file's room
+     is currently joined (or does nothing if none is). */
+  const sendCursor = useCallback((position) => {
+    sendCursorRef.current?.(position);
   }, []);
 
-  /* ── replaceText ──
-     Atomically replaces the entire document content with new text.
-     Used by snapshot restore — wrapped in a Yjs transaction so the
-     delete + insert is applied as one atomic update (one entry in
-     the undo stack, one network message, not two separate ones that
-     could be observed mid-way by another connected client). */
+  /* ── getText / replaceText ──
+     Read/replace the current file room's shared text. Kept for the
+     existing (pre-Phase-4) title/snapshot call sites that already
+     expect this shape; text name matches the backend's
+     yjsManager.getSharedText ("editor"). */
+  const getText = useCallback(() => {
+    if (!ydocRef.current) return '';
+    return ydocRef.current.getText('editor').toString();
+  }, []);
+
   const replaceText = useCallback((newText) => {
     const ydoc = ydocRef.current;
     if (!ydoc) return;
 
-    const ytext = ydoc.getText('content');
+    const ytext = ydoc.getText('editor');
     ydoc.transact(() => {
       ytext.delete(0, ytext.length);
       ytext.insert(0, newText);
@@ -335,11 +461,13 @@ export function useYjs({ docId, user, onUpdate, onPeersChange }) {
 
   return {
     ydocRef,
-    awarenessRef,
-    bindingRef,
     connected,
+    peers,
     getText,
     replaceText,
+    cursors,
+    sendCursor,
+    typingSocketIds,
   };
 }
 

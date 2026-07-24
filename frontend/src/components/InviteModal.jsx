@@ -17,8 +17,7 @@ export default function InviteModal({
     setLoading(true);
 
     try {
-      await api.post("/invitations", {
-        documentId,
+      await api.post(`/invitations/${documentId}/invite`, {
         email,
       });
 

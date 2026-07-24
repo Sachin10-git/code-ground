@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
     inviteMember,
+    getMyInvitations,
     acceptInvitation,
     rejectInvitation
 } = require("../controllers/invitationController");
@@ -27,6 +28,13 @@ router.post(
     validateInvite,
     validate,
     inviteMember
+);
+
+// Get my pending invitations
+router.get(
+    "/",
+    authenticate,
+    getMyInvitations
 );
 
 router.post(

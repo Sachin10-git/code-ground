@@ -7,6 +7,7 @@ import Login       from './pages/Login.jsx';
 import Register    from './pages/Register.jsx';
 import Dashboard   from './pages/Dashboard.jsx';
 import Editor      from './pages/Editor.jsx';
+import Invitations from './pages/Invitations.jsx';
 import Pricing     from './pages/Pricing.jsx';
 import AISidebar   from './components/AISidebar.jsx';
 import Presence    from './components/Presence.jsx';
@@ -130,6 +131,9 @@ function AppRoutes() {
       <Route path="/pricing"  element={<Pricing />}  />
       <Route path="/dashboard" element={
         <PrivateRoute><Dashboard /></PrivateRoute>
+      } />
+      <Route path="/invitations" element={
+        <PrivateRoute><Invitations /></PrivateRoute>
       } />
       <Route path="/editor/:docId" element={
         <PrivateRoute><Editor /></PrivateRoute>

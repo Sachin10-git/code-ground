@@ -7,6 +7,7 @@ const {
 } = require("./roomManager");
 
     const Y = require("yjs");
+    const File = require("../models/file");
 
 const {
     startTyping,
@@ -37,9 +38,10 @@ const {
 
 const {
     getDocument,
+    getSharedText,
     removeDocument,
 } = require("../crdt/yjsManager");
-const { loadDocument } = require("../crdt/persistenceManager");
+const { loadDocument, saveDocument } = require("../crdt/persistenceManager");
 
 const {
     recoverDocument,
@@ -57,6 +59,48 @@ const {
 const {
     createSnapshot,
 } = require("../crdt/snapshotManager");
+
+/**
+ * Phase 5 bridge: a file's collaboration room has no history the very
+ * first time it's joined (no CRDTSnapshot / CRDTDocument yet), so its
+ * Y.Doc starts empty. Seed it once from the File's REST-persisted
+ * `content` (Phase 4) so collaborators see the real file instead of a
+ * blank document. Guarded by an in-flight-promise map so two users
+ * opening the same brand-new room at once can't both insert the seed
+ * text (which would duplicate it) — the map's get/set happen with no
+ * `await` between them, so concurrent joins always share one promise.
+ */
+const fileSeedPromises = new Map();
+
+const ensureFileSeed = async (roomId, doc) => {
+
+    const sharedText = getSharedText(roomId);
+
+    if (sharedText.length > 0) return;
+
+    if (!fileSeedPromises.has(roomId)) {
+
+        fileSeedPromises.set(
+            roomId,
+            File.findById(roomId)
+                .select("content")
+                .then((file) => {
+                    if (file?.content && sharedText.length === 0) {
+                        doc.transact(() => {
+                            sharedText.insert(0, file.content);
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.error("[CRDT] Failed to seed room from file content:", err);
+                })
+        );
+
+    }
+
+    return fileSeedPromises.get(roomId);
+
+};
 
 const registerSocketEvents = (io) => {
   io.on(SOCKET_EVENTS.CONNECTION, (socket) => {
@@ -76,6 +120,8 @@ const registerSocketEvents = (io) => {
     if (!recovered) {
         await loadDocument(roomId, doc);
     }
+
+    await ensureFileSeed(roomId, doc);
 
     /**
      * Start periodic snapshots.
@@ -102,7 +148,7 @@ const registerSocketEvents = (io) => {
 
 });
 
-    socket.on(SOCKET_EVENTS.ROOM_LEAVE, (roomId) => {
+    socket.on(SOCKET_EVENTS.ROOM_LEAVE, async (roomId) => {
 
     leaveRoom(socket, roomId);
 
@@ -110,13 +156,24 @@ const registerSocketEvents = (io) => {
 
     if (!room || room.size === 0) {
 
+        /* Cancel the pending debounced save, then flush the room's
+           in-memory Y.Doc to CRDTDocument ourselves, synchronously,
+           before it's discarded below. Without this, any edits made
+           in the last <2s (the debounce window) before the room goes
+           empty were silently lost from CRDTDocument, and the next
+           ROOM_JOIN would resurrect an older version of the file. */
         clearSaveTimer(roomId);
+
+        const doc = getDocument(roomId);
+        await saveDocument(roomId, doc);
 
         stopSnapshot(roomId);
 
         removeAwareness(roomId);
 
         removeDocument(roomId);
+
+        fileSeedPromises.delete(roomId);
     }
 
     console.log(`${socket.id} left ${roomId}`);
@@ -141,6 +198,14 @@ const registerSocketEvents = (io) => {
 socket.on(
     SOCKET_EVENTS.CURSOR_MOVE,
     ({ roomId, cursor }) => {
+
+        // [CURSOR-DEBUG][STEP 3] CURSOR_MOVE received by backend
+        console.log("[CURSOR-DEBUG][STEP 3] CURSOR_MOVE received", {
+            socketId: socket.id,
+            username: socket.user?.username,
+            roomId,
+            cursor,
+        });
 
         updateCursor(io, socket, roomId, cursor);
     }
@@ -203,13 +268,13 @@ socket.on(
     }
 );
 
-  socket.on("disconnecting", () => {
+  socket.on("disconnecting", async () => {
 
     const rooms = [...socket.rooms];
 
-    rooms.forEach((roomId) => {
+    for (const roomId of rooms) {
 
-    if (roomId === socket.id) return;
+    if (roomId === socket.id) continue;
 
     leaveRoom(socket, roomId);
 
@@ -227,12 +292,19 @@ socket.on(
     const room = io.sockets.adapter.rooms.get(roomId);
 
     if (!room || room.size === 0) {
+        /* Same flush as ROOM_LEAVE above — a plain disconnect (tab
+           close / refresh) must not lose the last <2s of edits either. */
         clearSaveTimer(roomId);
+
+        const doc = getDocument(roomId);
+        await saveDocument(roomId, doc);
+
         stopSnapshot(roomId);
         removeAwareness(roomId);
         removeDocument(roomId);
+        fileSeedPromises.delete(roomId);
     }
-});
+}
 
 removeSocketFromAllRooms(socket);
 
