@@ -30,8 +30,12 @@
  */
 
 :root {
-  /* Right panel width — change here to affect all right-panel widths */
+  /* Right panel (AI chat) width — Phase 6.3.5: set inline per-render
+     from useResizablePanel's state; these are just the pre-hydration
+     fallback values. */
   --rp-width: 320px;
+  /* Left sidebar (Explorer + Activity) width — same deal. */
+  --sidebar-width: 220px;
   /* Top bar height */
   --tb-height: 48px;
   /* Output panel open height */
@@ -265,11 +269,59 @@
   min-height: 0;                 /* important for flex children to respect parent height */
 }
 
+/* ── Left sidebar wrapper (Phase 6.3.5) ──────
+   FileExplorer itself fills this (width: 100% — see
+   FileExplorer.module.css); this is what the resize handle actually
+   resizes. */
+.sidebar_wrap {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Only matters for the double-click-to-default reset — Editor.jsx
+     sets an inline `transition: none` override while actively
+     dragging, same reasoning as .right_panel below. */
+  transition: width 0.2s ease;
+}
+
+/* ── Resize handle (Phase 6.3.5) — shared by both the sidebar/editor
+   and editor/AI-chat dividers. A few px wide so it's comfortably
+   grabbable without visually reading as a thick border; the visible
+   highlight only appears on hover/active so it doesn't look like a
+   permanent seam the rest of the time. */
+.resize_handle {
+  flex-shrink: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  transition: background 0.15s;
+}
+.resize_handle:hover,
+.resize_handle_active {
+  background: rgba(59, 130, 246, 0.4);
+}
+
 /* Monaco editor wrapper */
 .editor_wrap {
   flex: 1;
   min-width: 0;                  /* prevent flex blowout */
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Phase 6.3.5 — Monaco's own container, now a flex sibling of
+   FilePresenceBar (Phase 6.4) rather than filling 100% of
+   .editor_wrap itself, so the presence bar has real layout space
+   above it instead of overlapping. */
+.monaco_wrap {
+  flex: 1;
+  min-height: 0;
   position: relative;
 }
 
@@ -285,7 +337,7 @@
   background: #080B14;
 }
 
-/* ── Right panel ─────────────────────────── */
+/* ── Right panel (AI chat + output) ──────── */
 .right_panel {
   width: var(--rp-width);
   flex-shrink: 0;
@@ -293,7 +345,20 @@
   flex-direction: column;
   border-left: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 0;
+  overflow: hidden;
   background: #0D1117;
+  /* Animates the show/hide toggle; the drag handle sets an inline
+     `transition: none` override on this element while dragging so a
+     live resize snaps 1:1 with the pointer instead of easing behind
+     it (see Editor.jsx's aiPanelResize.dragging usage). */
+  transition: width 0.2s ease;
+}
+
+/* Phase 6.3.5 — AI chat panel collapsed. Width is already driven to
+   0 via the --rp-width var set inline in Editor.jsx; this just drops
+   the border so a collapsed panel doesn't leave a stray 1px seam. */
+.right_panel_collapsed {
+  border-left: none;
 }
 
 /* ── AI sidebar ──────────────────────────── */
@@ -834,10 +899,23 @@
 }
 
 @media (max-width: 600px) {
-  :root { --rp-width: 100%; }
+  :root { --rp-width: 100%; --sidebar-width: 100%; }
 
-  /* Stack editor and right panel vertically on mobile */
+  /* Stack sidebar, editor and right panel vertically on mobile */
   .body { flex-direction: column; }
+
+  /* Phase 6.3.5 — dragging a 5px handle doesn't translate to touch,
+     and in a column layout it'd render as a near-invisible sliver
+     between stacked panels anyway; hide it rather than ship a
+     control that doesn't work here. */
+  .resize_handle { display: none; }
+
+  .sidebar_wrap {
+    width: 100%;
+    height: auto;
+    flex: 0 0 auto;
+    max-height: 40vh;
+  }
 
   .editor_wrap {
     /* Take 60% of height on mobile */
@@ -860,4 +938,5 @@
     animation: none;
   }
   .output_panel { transition: none; }
+  .sidebar_wrap, .right_panel { transition: none; }
 }

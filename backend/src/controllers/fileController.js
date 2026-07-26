@@ -1,6 +1,12 @@
 const fileService = require("../services/fileService");
 const asyncHandler = require("../middleware/asyncHandler");
 const ApiResponse = require("../utilities/ApiResponse");
+const {
+    broadcastFileCreated,
+    broadcastFileRenamed,
+    broadcastFileMoved,
+    broadcastFileDeleted,
+} = require("../socket/workspaceBroadcast");
 
 /**
  * Create File
@@ -12,6 +18,8 @@ const createFile = asyncHandler(async (req, res) => {
         req.user.id,
         req.body
     );
+
+    await broadcastFileCreated(req.params.projectId, file, req.user.username);
 
     return ApiResponse.success(
         res,
@@ -51,6 +59,8 @@ const renameFile = asyncHandler(async (req, res) => {
         req.user.id,
         req.body.name
     );
+
+    await broadcastFileRenamed(file.projectId, file, req.user.username);
 
     return ApiResponse.success(
         res,
@@ -92,6 +102,8 @@ const moveFile = asyncHandler(async (req, res) => {
         req.body.folderId
     );
 
+    await broadcastFileMoved(file.projectId, file, req.user.username);
+
     return ApiResponse.success(
         res,
         200,
@@ -106,10 +118,12 @@ const moveFile = asyncHandler(async (req, res) => {
  */
 const deleteFile = asyncHandler(async (req, res) => {
 
-    await fileService.deleteFile(
+    const file = await fileService.deleteFile(
         req.params.fileId,
         req.user.id
     );
+
+    await broadcastFileDeleted(file.projectId, file, req.user.username);
 
     return ApiResponse.success(
         res,

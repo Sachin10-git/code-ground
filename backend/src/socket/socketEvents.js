@@ -1,4 +1,5 @@
 const SOCKET_EVENTS = require("./socketConstants");
+const { DEBUG_COLLAB } = require("../utils/debugFlags");
 const {
   joinRoom,
   leaveRoom,
@@ -199,13 +200,14 @@ socket.on(
     SOCKET_EVENTS.CURSOR_MOVE,
     ({ roomId, cursor }) => {
 
-        // [CURSOR-DEBUG][STEP 3] CURSOR_MOVE received by backend
-        console.log("[CURSOR-DEBUG][STEP 3] CURSOR_MOVE received", {
-            socketId: socket.id,
-            username: socket.user?.username,
-            roomId,
-            cursor,
-        });
+        if (DEBUG_COLLAB) {
+            console.log("[CURSOR-DEBUG] CURSOR_MOVE received", {
+                socketId: socket.id,
+                username: socket.user?.username,
+                roomId,
+                cursor,
+            });
+        }
 
         updateCursor(io, socket, roomId, cursor);
     }

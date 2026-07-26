@@ -1,6 +1,12 @@
 const folderService = require("../services/folderService");
 const asyncHandler = require("../middleware/asyncHandler");
 const ApiResponse = require("../utilities/ApiResponse");
+const {
+    broadcastFolderCreated,
+    broadcastFolderRenamed,
+    broadcastFolderMoved,
+    broadcastFolderDeleted,
+} = require("../socket/workspaceBroadcast");
 
 /**
  * Create Folder
@@ -12,6 +18,8 @@ const createFolder = asyncHandler(async (req, res) => {
         req.user.id,
         req.body
     );
+
+    await broadcastFolderCreated(req.params.projectId, folder, req.user.username);
 
     return ApiResponse.success(
         res,
@@ -33,6 +41,8 @@ const renameFolder = asyncHandler(async (req, res) => {
         req.body.name
     );
 
+    await broadcastFolderRenamed(folder.projectId, folder, req.user.username);
+
     return ApiResponse.success(
         res,
         200,
@@ -47,10 +57,12 @@ const renameFolder = asyncHandler(async (req, res) => {
  */
 const deleteFolder = asyncHandler(async (req, res) => {
 
-    await folderService.deleteFolder(
+    const folder = await folderService.deleteFolder(
         req.params.folderId,
         req.user.id
     );
+
+    await broadcastFolderDeleted(folder.projectId, folder, req.user.username);
 
     return ApiResponse.success(
         res,
@@ -70,6 +82,8 @@ const moveFolder = asyncHandler(async (req, res) => {
         req.user.id,
         req.body.parentFolderId
     );
+
+    await broadcastFolderMoved(folder.projectId, folder, req.user.username);
 
     return ApiResponse.success(
         res,

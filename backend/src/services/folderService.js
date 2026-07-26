@@ -79,11 +79,16 @@ const renameFolder = async (folderId, userId, name) => {
         );
     }
 
+    const oldName = folder.name;
+
     folder.name = name;
 
     await folder.save();
 
-    return folder;
+    // Plain object (not the mongoose doc) so `oldName` — not a schema
+    // field — survives JSON serialization for both the REST response
+    // and workspaceBroadcast.js's rename payload/activity record.
+    return { ...folder.toObject(), oldName };
 
 };
 
@@ -140,6 +145,8 @@ const deleteFolder = async (folderId, userId) => {
     }
 
     await Folder.findByIdAndDelete(folderId);
+
+    return folder;
 
 };
 

@@ -14,6 +14,8 @@ const folderRoutes = require("./folder.routes");
 
 const fileRoutes = require("./file.routes");
 
+const activityRoutes = require("./activity.routes");
+
 const aiRoutes = require("./ai.routes");
 const runnerRoutes = require("./runner.routes");
 /**
@@ -43,6 +45,8 @@ router.use("/api/invitations", invitationRoutes);
 router.use("/api/projects", folderRoutes);
 
 router.use("/api/projects", fileRoutes);
+
+router.use("/api/projects", activityRoutes);
 
 router.use("/api/ai", aiRoutes);
 

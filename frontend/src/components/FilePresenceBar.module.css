@@ -1,0 +1,33 @@
+/*
+ * FilePresenceBar.module.css — Phase 6.4
+ *
+ * Same subtle/non-intrusive treatment as FileExplorer's Phase 6.2
+ * activity_banner — this sits directly above Monaco, so it needs to
+ * read as ambient status, not an alert.
+ */
+
+.root {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px;
+  font-size: 0.75rem;
+  color: #93C5FD;
+  background: rgba(59, 130, 246, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.part {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sep {
+  color: #334155;
+  margin-right: 5px;
+}

@@ -129,11 +129,16 @@ const renameFile = async (fileId, userId, name) => {
         );
     }
 
+    const oldName = file.name;
+
     file.name = name;
 
     await file.save();
 
-    return file;
+    // Plain object (not the mongoose doc) so `oldName` — not a schema
+    // field — survives JSON serialization for both the REST response
+    // and workspaceBroadcast.js's rename payload/activity record.
+    return { ...file.toObject(), oldName };
 
 };
 
@@ -246,7 +251,7 @@ const deleteFile = async (fileId, userId) => {
 
     await File.findByIdAndDelete(fileId);
 
-    return;
+    return file;
 
 };
 

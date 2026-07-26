@@ -2,6 +2,7 @@ const { Server } = require("socket.io");
 const registerSocketEvents = require("./socketEvents");
 const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../db/models/User");
+const { initializeWorkspaceNamespace } = require("./workspaceSocket");
 
 let io;
 
@@ -50,6 +51,7 @@ const initializeSocket = (server) => {
   io.use(socketAuthMiddleware);
 
   registerSocketEvents(io);
+  initializeWorkspaceNamespace(io);
 
   return io;
 };

@@ -43,6 +43,14 @@
  *   reflects the file's real content — so the caller can safely bind
  *   Monaco to it without y-monaco's initial sync clobbering the model
  *   back to an empty string.
+ *
+ *   `isLocalTyping` (Phase 6.4, returned) mirrors the LOCAL user's own
+ *   isTyping flag at exactly the moments this hook already emits
+ *   TYPING_START/TYPING_STOP (including the debounced stop and the
+ *   room-cleanup flush) — added so Editor.jsx can relay the same
+ *   already-debounced editing/viewing transition into
+ *   useFilePresence.js as its `isEditing` input, instead of that hook
+ *   re-deriving typing state from scratch.
  */
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -136,6 +144,8 @@ export function useYjs({ fileId, user, onDocReady }) {
   const [connected,       setConnected]       = useState(false);
   const [peersRoster,     setPeersRoster]     = useState([]); // [{ userId, name }]
   const [typingSocketIds, setTypingSocketIds] = useState(() => new Set());
+  /* Phase 6.4 — see the docstring above for what this is and why. */
+  const [isLocalTyping,   setIsLocalTyping]   = useState(false);
   /* Remote live-cursor positions for the current file room, keyed by
      socketId (not userId — each connection has its own caret).
      { [socketId]: { userId, username, position: {lineNumber, column} } } */
@@ -375,11 +385,13 @@ export function useYjs({ fileId, user, onDocReady }) {
       if (!isTyping) {
         isTyping = true;
         socket.emit(SOCKET_EVENTS.TYPING_START, fileId);
+        setIsLocalTyping(true);
       }
       if (typingStopTimer) clearTimeout(typingStopTimer);
       typingStopTimer = setTimeout(() => {
         isTyping = false;
         socket.emit(SOCKET_EVENTS.TYPING_STOP, fileId);
+        setIsLocalTyping(false);
       }, TYPING_STOP_DELAY);
     }
     doc.on('update', onLocalUpdate);
@@ -411,6 +423,7 @@ export function useYjs({ fileId, user, onDocReady }) {
       doc.off('update', onLocalUpdate);
       if (typingStopTimer) clearTimeout(typingStopTimer);
       if (isTyping) socket.emit(SOCKET_EVENTS.TYPING_STOP, fileId);
+      setIsLocalTyping(false);
 
       socket.off(SOCKET_EVENTS.DOCUMENT_SYNC, onDocumentSync);
       socket.off(SOCKET_EVENTS.FILE_UPDATED, onFileUpdated);
@@ -468,6 +481,7 @@ export function useYjs({ fileId, user, onDocReady }) {
     cursors,
     sendCursor,
     typingSocketIds,
+    isLocalTyping,
   };
 }
 

@@ -67,10 +67,13 @@ import OutputPanel from '../components/OutputPanel.jsx';
 import SnapshotDrawer from '../components/SnapshotDrawer.jsx';
 import Navbar from '../components/Navbar.jsx';
 import FileExplorer from '../components/FileExplorer.jsx';
+import FilePresenceBar from '../components/FilePresenceBar.jsx';
 import { useYjs } from '../hooks/useYjs.js';
 import { useAI } from '../hooks/useAI.js';
 import { useExecution } from '../hooks/useExecution.js';
 import { useRemoteCursors } from '../hooks/useRemoteCursors.js';
+import { useFilePresence } from '../hooks/useFilePresence.js';
+import { useResizablePanel } from '../hooks/useResizablePanel.js';
 
 /* ─────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -107,6 +110,13 @@ function avatarColor(name = '') {
 
 /* Max edits kept in memory for AI context */
 const MAX_EDIT_LOG = 50;
+
+/* Phase 6.3.5 — resizable panel width constraints. Defaults match the
+   pre-resize fixed widths (sidebar was 220px, right panel 320px via
+   Editor.module.css's old --rp-width) so nobody's layout jumps on
+   first load after this shipped. */
+const SIDEBAR_WIDTH  = { storageKey: 'cg_sidebar_width',  defaultWidth: 220, minWidth: 160, maxWidth: 480 };
+const AI_PANEL_WIDTH = { storageKey: 'cg_ai_panel_width', defaultWidth: 320, minWidth: 260, maxWidth: 560 };
 
 /* Fallback language detection by file extension — the File model's
    `language` field defaults to 'plaintext' for every new file, so
@@ -235,6 +245,12 @@ export default function Editor() {
   const [dirtyFileIds, setDirtyFileIds] = useState(() => new Set());
   const [saving,        setSaving]        = useState(false);
   const [saveError,     setSaveError]     = useState('');
+
+  /* Phase 6.1: transient notice for workspace events that affect the
+     currently open file (e.g. a collaborator deleted it) — reuses the
+     same inline-banner style as saveError rather than a new toast
+     system. */
+  const [workspaceNotice, setWorkspaceNotice] = useState('');
 
   // const [output,     setOutput]     = useState(null);
   // const [running,    setRunning]    = useState(false);
@@ -382,8 +398,64 @@ export default function Editor() {
   const handleSelectFile = useCallback((file) => {
     setSelectedFile(file);
     setSaveError('');
+    setWorkspaceNotice('');
     openFileInEditor(file);
   }, [openFileInEditor]);
+
+  /* ── Phase 6.1: workspace events affecting the currently open file ──
+     FileExplorer forwards every remote file rename/move/delete here
+     regardless of which file it touched; these no-op unless it's the
+     one currently open. Nothing here ever touches the Yjs room or the
+     Monaco model's content/undo history for a rename or move — both
+     are keyed by file `_id`, not name/path, so that collaboration
+     session keeps running untouched underneath the updated label. */
+  const handleRemoteFileRenamed = useCallback((fileId, name) => {
+    const current = selectedFileRef.current;
+    if (!current || current._id !== fileId || current.name === name) return;
+
+    const oldLang = resolveLanguage(current);
+    const newLang = resolveLanguage({ ...current, name });
+
+    setSelectedFile(prev => (prev && prev._id === fileId ? { ...prev, name } : prev));
+
+    if (oldLang !== newLang) {
+      const model = modelsRef.current.get(fileId);
+      if (model && monacoRef.current) {
+        monacoRef.current.editor.setModelLanguage(model, newLang);
+      }
+    }
+  }, []);
+
+  const handleRemoteFileMoved = useCallback((fileId, folderId) => {
+    setSelectedFile(prev => (prev && prev._id === fileId ? { ...prev, folderId } : prev));
+  }, []);
+
+  const handleRemoteFileDeleted = useCallback((fileId) => {
+    if (fileId !== selectedFileRef.current?._id) return;
+
+    collabBindingRef.current?.destroy();
+    collabBindingRef.current = null;
+
+    const model = modelsRef.current.get(fileId);
+    cursorRenderingRef.current?.prepareFileSwitch(fileId, model, editorRef.current);
+    editorRef.current?.setModel(null);
+
+    modelsRef.current.delete(fileId);
+    viewStatesRef.current.delete(fileId);
+    savedContentRef.current.delete(fileId);
+    model?.dispose();
+
+    setDirtyFileIds(prev => {
+      if (!prev.has(fileId)) return prev;
+      const next = new Set(prev);
+      next.delete(fileId);
+      return next;
+    });
+
+    setSelectedFile(null);
+    setSaveError('');
+    setWorkspaceNotice('This file was deleted by another collaborator.');
+  }, []);
 
   /* Saves the currently open file's content via the Phase 4 endpoint.
      Guarded by savingRef so two overlapping saves can never be in
@@ -451,11 +523,29 @@ export default function Editor() {
      applied. */
   const {
     connected, peers, getText, replaceText, cursors, sendCursor, typingSocketIds,
+    isLocalTyping,
   } = useYjs({
     fileId:     selectedFileId,
     user,
     onDocReady: handleDocReady,
   });
+
+  /* Phase 6.4 — file presence. `isLocalTyping` (from useYjs, already
+     debounced) drives the editing⇄viewing state this client
+     announces for whichever file is currently open; `filePresence` is
+     the live map of what everyone ELSE has announced, project-wide —
+     threaded down to FileExplorer for its per-file badges, and sliced
+     to just the open file for FilePresenceBar below. */
+  const { filePresence } = useFilePresence({
+    projectId,
+    fileId:    selectedFileId,
+    isEditing: isLocalTyping,
+  });
+
+  /* Phase 6.3.5 — resizable left sidebar / AI chat panel. */
+  const sidebarResize = useResizablePanel({ ...SIDEBAR_WIDTH,  edge: 'right' });
+  const aiPanelResize = useResizablePanel({ ...AI_PANEL_WIDTH, edge: 'left'  });
+  const [aiChatOpen, setAiChatOpen] = useState(true);
 
   useEffect(() => { sendCursorRef.current = sendCursor; }, [sendCursor]);
 
@@ -732,69 +822,129 @@ function handleAISend(question) {
       fileDirty={selectedFile ? dirtyFileIds.has(selectedFile._id) : false}
       savingFile={saving}
       saveFileDisabled={!selectedFile}
+      aiChatOpen={aiChatOpen}
+      onToggleAIChat={() => setAiChatOpen(o => !o)}
     />
 
     {/* ── Body: file explorer + editor + right panel ── */}
     <div className={styles.body}>
 
-      {/* Workspace file explorer (Phase 3 — navigation only, no content binding) */}
-      <FileExplorer
-        projectId={projectId}
-        selectedFileId={selectedFileId}
-        onSelectFile={handleSelectFile}
+      {/* Workspace file explorer — Phase 3 navigation + Phase 6.1 live
+          sync — width controlled by the resize handle just after it
+          (Phase 6.3.5). */}
+      <div
+        className={styles.sidebar_wrap}
+        style={{
+          '--sidebar-width': `${sidebarResize.width}px`,
+          transition: sidebarResize.dragging ? 'none' : undefined,
+        }}
+      >
+        <FileExplorer
+          projectId={projectId}
+          selectedFileId={selectedFileId}
+          onSelectFile={handleSelectFile}
+          onRemoteFileRenamed={handleRemoteFileRenamed}
+          onRemoteFileMoved={handleRemoteFileMoved}
+          onRemoteFileDeleted={handleRemoteFileDeleted}
+          filePresence={filePresence}
+        />
+      </div>
+
+      <div
+        className={`${styles.resize_handle} ${sidebarResize.dragging ? styles.resize_handle_active : ''}`}
+        onPointerDown={sidebarResize.onHandlePointerDown}
+        onDoubleClick={sidebarResize.onHandleDoubleClick}
+        title="Drag to resize · double-click to reset"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize file explorer panel"
       />
 
       {/* Monaco editor */}
       <div className={styles.editor_wrap}>
-        {saveError && (
-          <div
-            role="alert"
-            style={{
-              position: 'absolute', top: 8, right: 8, zIndex: 5,
-              background: '#7f1d1d', color: '#fecaca',
-              padding: '4px 10px', borderRadius: 6, fontSize: 12,
-            }}
-          >
-            {saveError}
-          </div>
-        )}
-        <MonacoEditor
-          height="100%"
-          language={doc?.language ?? 'javascript'}
-          theme="codeground"
-          onMount={handleEditorMount}
-          loading={
-            <div className={styles.editor_loading}>
-              <Spinner size={20} />
-              <span>Loading editor…</span>
+        {/* Phase 6.4 — who else has this file open right now */}
+        <FilePresenceBar presence={selectedFileId ? filePresence[selectedFileId] : undefined} />
+
+        <div className={styles.monaco_wrap}>
+          {(saveError || workspaceNotice) && (
+            <div
+              role="alert"
+              style={{
+                position: 'absolute', top: 8, right: 8, zIndex: 5,
+                background: saveError ? '#7f1d1d' : '#1e3a5f',
+                color: saveError ? '#fecaca' : '#bfdbfe',
+                padding: '4px 10px', borderRadius: 6, fontSize: 12,
+              }}
+            >
+              {saveError || workspaceNotice}
             </div>
-          }
-          options={{
-            readOnly:                   !selectedFile,
-            fontSize:                   14,
-            fontFamily:                 "'JetBrains Mono', monospace",
-            fontLigatures:              true,
-            lineHeight:                 1.8,
-            letterSpacing:              0.3,
-            minimap:                    { enabled: false },
-            scrollBeyondLastLine:        false,
-            smoothScrolling:             true,
-            cursorBlinking:              'phase',
-            cursorSmoothCaretAnimation: 'on',
-            padding:                    { top: 20, bottom: 20 },
-            wordWrap:                   'on',
-            tabSize:                    2,
-            renderLineHighlight:        'line',
-            bracketPairColorization:    { enabled: true },
-            formatOnPaste:              true,
-            suggestOnTriggerCharacters: true,
-            scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
-          }}
-        />
+          )}
+          <MonacoEditor
+            height="100%"
+            language={doc?.language ?? 'javascript'}
+            theme="codeground"
+            onMount={handleEditorMount}
+            loading={
+              <div className={styles.editor_loading}>
+                <Spinner size={20} />
+                <span>Loading editor…</span>
+              </div>
+            }
+            options={{
+              readOnly:                   !selectedFile,
+              fontSize:                   14,
+              fontFamily:                 "'JetBrains Mono', monospace",
+              fontLigatures:              true,
+              lineHeight:                 1.8,
+              letterSpacing:              0.3,
+              minimap:                    { enabled: false },
+              scrollBeyondLastLine:        false,
+              smoothScrolling:             true,
+              cursorBlinking:              'phase',
+              cursorSmoothCaretAnimation: 'on',
+              padding:                    { top: 20, bottom: 20 },
+              wordWrap:                   'on',
+              tabSize:                    2,
+              renderLineHighlight:        'line',
+              bracketPairColorization:    { enabled: true },
+              formatOnPaste:              true,
+              suggestOnTriggerCharacters: true,
+              scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+              /* Phase 6.3.5 — both resize handles change this
+                 container's size via CSS, not a window resize event;
+                 without this Monaco never notices and its canvas
+                 stays the old size. */
+              automaticLayout: true,
+            }}
+          />
+        </div>
       </div>
 
-      {/* Right panel */}
-      <div className={styles.right_panel}>
+      {/* AI chat / output panel — resizable + collapsible (Phase 6.3.5).
+          The handle only exists while the panel is open; there's
+          nothing to drag against once it's collapsed to 0. */}
+      {aiChatOpen && (
+        <div
+          className={`${styles.resize_handle} ${aiPanelResize.dragging ? styles.resize_handle_active : ''}`}
+          onPointerDown={aiPanelResize.onHandlePointerDown}
+          onDoubleClick={aiPanelResize.onHandleDoubleClick}
+          title="Drag to resize · double-click to reset"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize AI chat panel"
+        />
+      )}
+
+      <div
+        className={`${styles.right_panel} ${!aiChatOpen ? styles.right_panel_collapsed : ''}`}
+        style={{
+          '--rp-width': aiChatOpen ? `${aiPanelResize.width}px` : '0px',
+          transition: aiPanelResize.dragging ? 'none' : undefined,
+        }}
+      >
+        {/* Never unmounted while collapsed — preserves AISidebar's own
+            message list / input state so reopening restores exactly
+            where the conversation left off. */}
         <AISidebar
   messages={aiMessages}
   loading={aiLoading}

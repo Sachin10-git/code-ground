@@ -44,6 +44,70 @@ const SOCKET_EVENTS = {
     AWARENESS_CHANGED: "editor:awareness-changed",
 
     DOCUMENT_SYNC: "editor:document-sync",
+
+    /**
+     * -------------------------------------------------------
+     * Workspace Synchronization (Phase 6.1)
+     * -------------------------------------------------------
+     * Isolated from the editor-collaboration events above — these
+     * live on the separate `/workspace` Socket.IO namespace (see
+     * socket/workspaceSocket.js) so they never interact with the
+     * per-file Yjs room lifecycle in socketEvents.js.
+     * -------------------------------------------------------
+     */
+    WORKSPACE_JOIN: "workspace:join",
+    WORKSPACE_LEAVE: "workspace:leave",
+
+    WORKSPACE_FILE_CREATED: "workspace:file-created",
+    WORKSPACE_FILE_RENAMED: "workspace:file-renamed",
+    WORKSPACE_FILE_DELETED: "workspace:file-deleted",
+    WORKSPACE_FILE_MOVED: "workspace:file-moved",
+
+    WORKSPACE_FOLDER_CREATED: "workspace:folder-created",
+    WORKSPACE_FOLDER_RENAMED: "workspace:folder-renamed",
+    WORKSPACE_FOLDER_DELETED: "workspace:folder-deleted",
+    WORKSPACE_FOLDER_MOVED: "workspace:folder-moved",
+
+    /**
+     * -------------------------------------------------------
+     * Workspace Presence (Phase 6.2)
+     * -------------------------------------------------------
+     * A client pings WORKSPACE_ACTIVITY whenever it performs a
+     * workspace mutation (create/rename/delete/move); the server
+     * relays it to everyone else in that project's room as
+     * WORKSPACE_USER_ACTIVE. There is no matching "stop" event —
+     * unlike typing (a continuous keystroke stream with a natural
+     * start/stop), each mutation is a one-off action, so receivers
+     * treat a WORKSPACE_USER_ACTIVE as "active for the next ~2s" and
+     * let it expire on their own timer (see useWorkspaceSync.js).
+     * -------------------------------------------------------
+     */
+    WORKSPACE_ACTIVITY: "workspace:activity",
+    WORKSPACE_USER_ACTIVE: "workspace:user-active",
+
+    /**
+     * -------------------------------------------------------
+     * File Presence (Phase 6.4)
+     * -------------------------------------------------------
+     * Also on the `/workspace` namespace, project-room-scoped —
+     * unlike the per-file Yjs room's typing indicator (editor:*
+     * above, joined only for whichever ONE file the local user
+     * currently has open), the Explorer needs to show presence for
+     * EVERY file in the project at once, so this can't just reuse
+     * that per-file room. It reuses its *pattern* instead: a client
+     * announces a `state` ("viewing" while a file is open, "editing"
+     * while its Yjs typing signal is on) via WORKSPACE_FILE_PRESENCE,
+     * and explicitly leaves via WORKSPACE_FILE_PRESENCE_LEAVE when it
+     * closes/switches away from that file — mirroring TYPING_START/
+     * STOP's already-debounced viewing⇄editing transition rather than
+     * reinventing a second decay timer here.
+     * -------------------------------------------------------
+     */
+    WORKSPACE_FILE_PRESENCE: "workspace:file-presence",
+    WORKSPACE_FILE_PRESENCE_LEAVE: "workspace:file-presence-leave",
+
+    WORKSPACE_FILE_PRESENT: "workspace:file-present",
+    WORKSPACE_FILE_ABSENT: "workspace:file-absent",
 };
 
 module.exports = SOCKET_EVENTS;

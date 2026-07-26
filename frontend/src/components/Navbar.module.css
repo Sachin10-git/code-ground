@@ -256,6 +256,18 @@
   color: #E2E8F0;
 }
 
+/* Phase 6.3.5 — AI chat toggle, "on" state */
+.snapshots_btn_active {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.1);
+  color: #93C5FD;
+}
+.snapshots_btn_active:hover {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: rgba(59, 130, 246, 0.16);
+  color: #BFDBFE;
+}
+
 /* ── Run button ─────────────────────────── */
 .run_btn {
   display: flex;
