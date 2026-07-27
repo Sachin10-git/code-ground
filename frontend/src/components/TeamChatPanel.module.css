@@ -1,0 +1,221 @@
+/*
+ * TeamChatPanel.module.css — Code Ground Team Chat panel
+ *
+ * Same design tokens/layout skeleton as AIChatPanel.module.css — the two
+ * panels are meant to feel like one product, switched by a tab strip
+ * that lives one level up in Editor.jsx (see TabStrip styles in
+ * Editor.module.css).
+ *
+ *   .root          — flex column, fills its parent container
+ *   .messages      — flex: 1, scrolls internally
+ *   .scroll_btn    — absolute, floats above input when user scrolls up
+ *   .input_wrap    — fixed height, textarea + send button
+ *   .input_hint    — fixed height, keyboard shortcut hint
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #0D1117;
+  position: relative;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+.sr_only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.spinner {
+  animation: spin 0.7s linear infinite;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* ── Message list ────────────────────────── */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 0 4px;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B transparent;
+}
+
+.messages::-webkit-scrollbar       { width: 4px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 2px; }
+.messages::-webkit-scrollbar-thumb:hover { background: #2D3748; }
+
+/* ── Loading state ───────────────────────── */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 2rem 1rem;
+  color: #64748B;
+  font-size: 0.8125rem;
+}
+
+/* ── Empty state ─────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 1.25rem 1rem;
+  gap: 0.5rem;
+  animation: fade_in 0.3s ease;
+}
+
+.empty_icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #3B82F6;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.empty_heading {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #E2E8F0;
+  line-height: 1.3;
+}
+
+.empty_sub {
+  font-size: 0.75rem;
+  color: #64748B;
+  line-height: 1.6;
+  max-width: 220px;
+}
+
+/* ── Scroll to bottom button ─────────────── */
+.scroll_btn {
+  position: absolute;
+  bottom: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #64748B;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  z-index: 10;
+  animation: fade_in 0.15s ease;
+}
+.scroll_btn:hover {
+  background: #1E293B;
+  color: #E2E8F0;
+  transform: translateX(-50%) scale(1.1);
+}
+
+/* ── Input area ──────────────────────────── */
+.input_wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: #080B14;
+}
+
+.input {
+  flex: 1;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #E2E8F0;
+  font-size: 0.8125rem;
+  font-family: 'Inter', sans-serif;
+  padding: 8px 10px;
+  outline: none;
+  resize: none;
+  line-height: 1.5;
+  min-height: 36px;
+  max-height: 120px;
+  overflow-y: auto;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder        { color: #2D3748; }
+.input:focus               { border-color: rgba(59, 130, 246, 0.4); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08); }
+.input::-webkit-scrollbar  { width: 3px; }
+.input::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 2px; }
+
+.send_btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #3B82F6;
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  align-self: flex-end;
+}
+.send_btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(59, 130, 246, 0.3);
+}
+.send_btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+.send_btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ── Input hint ──────────────────────────── */
+.input_hint {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.625rem;
+  color: #1E293B;
+  padding: 0 10px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.01em;
+  background: #080B14;
+}
+
+/* ── Keyframes ────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fade_in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .empty, .scroll_btn { animation: none; }
+  .input, .send_btn { transition: none; }
+}

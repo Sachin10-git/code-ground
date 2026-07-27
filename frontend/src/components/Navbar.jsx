@@ -430,7 +430,7 @@ export default function Navbar({
             aria-label={aiChatOpen ? 'Hide AI chat panel' : 'Show AI chat panel'}
           >
             <AIChatIcon />
-            <span className={styles.snapshots_label}>AI Chat</span>
+            <span className={styles.snapshots_label}>Chat</span>
           </button>
         )}
 

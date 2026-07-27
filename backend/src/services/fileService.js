@@ -4,6 +4,10 @@ const Project = require("../db/models/project");
 const projectService = require("./projectService");
 const ApiError = require("../utils/ApiError");
 
+const { hasDocument, getDocument } = require("../crdt/yjsManager");
+const { saveDocument } = require("../crdt/persistenceManager");
+const { clearSaveTimer } = require("../crdt/debounceManager");
+
 /**
  * Create File
  */
@@ -144,6 +148,21 @@ const renameFile = async (fileId, userId, name) => {
 
 /**
  * Update File Content
+ *
+ * Persists the editor's content to File.content — but that alone isn't
+ * enough to make a manual Save reliable: this file's live collaboration
+ * room (if one is active — see crdt/yjsManager.js) is what actually
+ * seeds the editor on every future ROOM_JOIN (see socketEvents.js),
+ * and it's normally only flushed to CRDTDocument on a 2s debounce after
+ * the user stops typing (see crdt/debounceManager.js). A user who edits
+ * and immediately closes the tab — or just gets unlucky with timing —
+ * could lose up to that 2s window even though File.content itself saved
+ * correctly. Forcing an immediate flush here (only when a live room
+ * actually exists for this file — hasDocument, never getDocument,
+ * which would otherwise conjure a brand-new EMPTY doc and persist that
+ * instead) makes manual Save authoritative regardless of the debounce
+ * timer, per the Phase 6.6 requirement that it "force persistence"
+ * rather than just trust autosave to have already happened.
  */
 const updateFileContent = async (fileId, userId, content) => {
 
@@ -171,6 +190,11 @@ const updateFileContent = async (fileId, userId, content) => {
     file.content = content ?? "";
 
     await file.save();
+
+    if (hasDocument(fileId)) {
+        clearSaveTimer(fileId);
+        await saveDocument(fileId, getDocument(fileId));
+    }
 
     return file;
 

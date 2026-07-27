@@ -1,0 +1,178 @@
+/*
+ * MarkdownLite.module.css — Code Ground shared Markdown renderer
+ *
+ * Self-contained: owns spacing between its own rendered blocks
+ * (`.root > * + *`) so any consumer (TeamChatMessage, AIChatMessage)
+ * just drops this component inside its own bubble/wrapper styling
+ * without needing its own spacing rule.
+ *
+ * Same design tokens as the rest of the app:
+ *   Surface:       #0D1117
+ *   Border:        rgba(255,255,255,0.07)
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ */
+
+.root {
+  min-width: 0;
+  /* Phase 6.6 — a single long unbroken run (URL, hash, identifier) has
+     no natural wrap point under white-space: pre-wrap alone; this is
+     the one place that needs to hold for every descendant (headings,
+     paragraphs, list items, inline code) so nothing here can push the
+     chat panel wider than its container. Code blocks are deliberately
+     exempt (see .code_content) — they scroll horizontally instead,
+     since wrapping code mid-line would misrepresent it. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.root > * + * {
+  margin-top: 6px;
+}
+
+.paragraph {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.root a {
+  color: #60A5FA;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+/* ── Headings ────────────────────────────── */
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #E2E8F0;
+}
+.h1 { font-size: 1.125rem; }
+.h2 { font-size: 1.0625rem; }
+.h3 { font-size: 1rem; }
+.h4, .h5, .h6 { font-size: 0.9375rem; }
+
+/* ── Lists ───────────────────────────────── */
+.list {
+  margin: 0;
+  padding-left: 1.25em;
+}
+.list li {
+  margin: 2px 0;
+}
+.list li::marker {
+  color: #64748B;
+}
+
+/* ── Inline code ─────────────────────────── */
+.inline_code {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78em;
+  color: #FDE68A;
+  overflow-wrap: anywhere;
+}
+
+/* ── Tables ──────────────────────────────── */
+.table_wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.table_wrap::-webkit-scrollbar       { height: 4px; }
+.table_wrap::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 2px; }
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.78rem;
+}
+.table th, .table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  text-align: left;
+  white-space: nowrap;
+}
+.table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #94A3B8;
+  font-weight: 600;
+}
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Fenced code block ───────────────────── */
+.code_block {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #080B14;
+  max-width: 100%;
+}
+
+.code_block_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.code_lang {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  color: #64748B;
+  text-transform: lowercase;
+}
+
+.code_copy_btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: #475569;
+  font-size: 0.6875rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.code_copy_btn:hover {
+  color: #E2E8F0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.code_content {
+  margin: 0;
+  padding: 9px 11px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+.code_content::-webkit-scrollbar        { height: 4px; }
+.code_content::-webkit-scrollbar-thumb  { background: #1E293B; border-radius: 2px; }
+
+/* ── Syntax highlighting ─────────────────────────────────────────────
+   Token colours match the editor's own custom Monaco theme
+   (Editor.jsx's `codeground` theme) so a pasted/generated snippet
+   reads the same in chat as it does in the editor itself.
+   highlight.js's classes are global (not module-scoped), hence
+   :global() here. */
+:global(.hljs)                                        { color: #E2E8F0; background: transparent; }
+:global(.hljs-comment), :global(.hljs-quote)          { color: #4B5563; font-style: italic; }
+:global(.hljs-keyword), :global(.hljs-selector-tag)   { color: #93C5FD; }
+:global(.hljs-string), :global(.hljs-regexp)          { color: #86EFAC; }
+:global(.hljs-number), :global(.hljs-literal)         { color: #F9A8D4; }
+:global(.hljs-type), :global(.hljs-class .hljs-title)  { color: #67E8F9; }
+:global(.hljs-title), :global(.hljs-title.function_), :global(.hljs-built_in) { color: #FDE68A; }
+:global(.hljs-attr), :global(.hljs-attribute), :global(.hljs-params) { color: #E2E8F0; }
+:global(.hljs-variable), :global(.hljs-template-variable) { color: #F9A8D4; }

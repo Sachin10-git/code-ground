@@ -187,6 +187,16 @@
   padding-left: 4px;
 }
 
+/* Phase 6.6 — file lock indicator, same "small trailing badge" slot
+   as .presence_badge above. */
+.lock_badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: #FBBF24;
+  padding-left: 4px;
+}
+
 .inline_input {
   flex: 1;
   background: #080B14;

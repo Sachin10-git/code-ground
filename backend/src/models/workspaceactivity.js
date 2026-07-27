@@ -26,7 +26,10 @@ const WorkspaceActivitySchema = new mongoose.Schema(
 
     operation: {
         type: String,
-        enum: ["created", "renamed", "moved", "deleted"],
+        // Phase 6.6 — "locked"/"unlocked" added for file-locking activity
+        // entries (see socket/workspaceBroadcast.js's broadcastFileLocked/
+        // broadcastFileUnlocked).
+        enum: ["created", "renamed", "moved", "deleted", "locked", "unlocked"],
         required: true
     },
 

@@ -1,0 +1,202 @@
+/*
+ * GeneratePromptModal.module.css — Code Ground AI Generate prompt entry
+ *
+ * Design tokens (same system as every other component):
+ *   Base bg:       #080B14
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *   Text hint:     #334155
+ *   Danger red:    #F87171
+ *
+ * Centered dialog (not a slide-in drawer) — same backdrop/animation
+ * conventions as SnapshotDrawer.module.css.
+ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: backdrop_in 0.2s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  padding: 18px 20px 20px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  animation: pop_in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #E2E8F0;
+  letter-spacing: -0.01em;
+}
+.title svg { color: #3B82F6; }
+
+.close_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #64748B;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.close_btn:hover {
+  color: #E2E8F0;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.context_hint {
+  font-size: 0.75rem;
+  color: #64748B;
+  margin-bottom: 12px;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 10px 12px;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  color: #E2E8F0;
+  font-size: 0.8125rem;
+  font-family: 'Inter', sans-serif;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.textarea::placeholder { color: #2D3748; }
+.textarea:hover { border-color: rgba(255, 255, 255, 0.14); }
+.textarea:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.error_text {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: #F87171;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.example_chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94A3B8;
+  font-size: 0.71875rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.example_chip:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+  color: #93C5FD;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.cancel_btn {
+  padding: 0.5rem 0.9rem;
+  background: transparent;
+  color: #94A3B8;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.cancel_btn:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #E2E8F0;
+}
+
+.submit_btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.5rem 1rem;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.submit_btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: translateY(-1px);
+}
+.submit_btn:active:not(:disabled) { transform: translateY(0); }
+.submit_btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Keyframes ───────────────────────────── */
+@keyframes backdrop_in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pop_in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Reduced motion ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .backdrop, .modal { animation: none; }
+  .close_btn, .example_chip, .cancel_btn, .submit_btn { transition: none; }
+}

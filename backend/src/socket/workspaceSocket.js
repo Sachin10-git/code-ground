@@ -1,6 +1,7 @@
 const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../db/models/User");
 const projectService = require("../services/projectService");
+const chatService = require("../services/chatService");
 const SOCKET_EVENTS = require("./socketConstants");
 const { broadcastActivity } = require("./workspaceActivityManager");
 const {
@@ -9,8 +10,29 @@ const {
   clearAllPresenceForSocket,
   getProjectPresence,
 } = require("./filePresenceManager");
+const { getLocksForProject } = require("./fileLockManager");
 
 const VALID_PRESENCE_STATES = new Set(["viewing", "editing"]);
+
+// Phase 6.0 — Team Chat. Matches ChatMessage's schema-level maxlength;
+// checked here too so an oversized message is rejected before it ever
+// reaches a DB round-trip.
+const CHAT_MESSAGE_MAX_LENGTH = 4000;
+
+/**
+ * Maps a persisted ChatMessage doc into the plain payload broadcast
+ * over the socket (and pushed as history) — never the raw Mongoose
+ * document, so the wire format can't accidentally change if the
+ * schema grows fields later.
+ */
+const formatChatMessage = (doc) => ({
+  id: doc._id.toString(),
+  projectId: doc.projectId.toString(),
+  userId: doc.userId.toString(),
+  username: doc.username,
+  message: doc.message,
+  createdAt: doc.createdAt,
+});
 
 /**
  * Phase 6.1 — Workspace Synchronization
@@ -82,6 +104,31 @@ const initializeWorkspaceNamespace = (io) => {
       for (const entry of getProjectPresence(projectId)) {
         socket.emit(SOCKET_EVENTS.WORKSPACE_FILE_PRESENT, entry);
       }
+
+      /* Phase 6.6 — same catch-up pattern for file locks: a socket that
+         opens the project after a file was already locked (by someone
+         editing it) needs to see that lock icon in the Explorer right
+         away, not only once it happens to open that specific file. */
+      for (const { fileId, username, userId, fileName } of getLocksForProject(projectId)) {
+        socket.emit(SOCKET_EVENTS.WORKSPACE_FILE_LOCKED, {
+          fileId, username, userId, name: fileName,
+        });
+      }
+
+      /* Phase 6.0 — Team Chat: send this socket the latest 100
+         persisted messages for the room it just joined. Sent only to
+         this socket (mirrors the file-presence catch-up above) — every
+         other member already has this history and just keeps
+         receiving TEAM_CHAT_MESSAGE broadcasts live. */
+      try {
+        const history = await chatService.getRecentMessages(projectId);
+        socket.emit(SOCKET_EVENTS.TEAM_CHAT_HISTORY, {
+          projectId,
+          messages: history.map(formatChatMessage),
+        });
+      } catch (err) {
+        console.error("[workspaceSocket] Failed to load chat history:", err);
+      }
     });
 
     socket.on(SOCKET_EVENTS.WORKSPACE_LEAVE, ({ projectId } = {}) => {
@@ -112,6 +159,34 @@ const initializeWorkspaceNamespace = (io) => {
     socket.on(SOCKET_EVENTS.WORKSPACE_FILE_PRESENCE_LEAVE, ({ projectId, fileId } = {}) => {
       if (!projectId || !fileId || !socket.rooms.has(projectId)) return;
       clearPresence(socket, projectId, fileId);
+    });
+
+    /* Phase 6.0 — Team Chat send. Same room-membership guard as
+       WORKSPACE_ACTIVITY/WORKSPACE_FILE_PRESENCE above. Persists first,
+       then broadcasts the persisted doc (real _id + server createdAt)
+       to EVERYONE in the room including the sender — there's no
+       separate optimistic-echo path, so every client's message list is
+       built from exactly one source of truth. */
+    socket.on(SOCKET_EVENTS.TEAM_CHAT_SEND, async ({ projectId, message } = {}) => {
+      if (!projectId || !socket.rooms.has(projectId)) return;
+
+      const trimmed = typeof message === "string" ? message.trim() : "";
+      if (!trimmed || trimmed.length > CHAT_MESSAGE_MAX_LENGTH) return;
+
+      try {
+        const chatMessage = await chatService.sendMessage({
+          projectId,
+          userId: socket.user.id,
+          username: socket.user.username,
+          message: trimmed,
+        });
+
+        workspaceNamespace
+          .to(projectId)
+          .emit(SOCKET_EVENTS.TEAM_CHAT_MESSAGE, formatChatMessage(chatMessage));
+      } catch (err) {
+        console.error("[workspaceSocket] Failed to send chat message:", err);
+      }
     });
 
     /* Phase 6.4 needs to know when a socket disconnects (to clear its

@@ -61,19 +61,23 @@ import MonacoEditor                     from '@monaco-editor/react';
 import { useAuth }                      from '../hooks/useAuth.jsx';
 import api                              from '../utils/api.js';
 import styles                           from './Editor.module.css';
-import AISidebar from '../components/AISidebar.jsx';
+import AIChatPanel from '../components/AIChatPanel.jsx';
+import TeamChatPanel from '../components/TeamChatPanel.jsx';
 import Presence  from '../components/Presence.jsx';
 import OutputPanel from '../components/OutputPanel.jsx';
 import SnapshotDrawer from '../components/SnapshotDrawer.jsx';
+import GeneratePromptModal from '../components/GeneratePromptModal.jsx';
 import Navbar from '../components/Navbar.jsx';
 import FileExplorer from '../components/FileExplorer.jsx';
 import FilePresenceBar from '../components/FilePresenceBar.jsx';
 import { useYjs } from '../hooks/useYjs.js';
 import { useAI } from '../hooks/useAI.js';
+import { useTeamChat } from '../hooks/useTeamChat.js';
 import { useExecution } from '../hooks/useExecution.js';
 import { useRemoteCursors } from '../hooks/useRemoteCursors.js';
 import { useFilePresence } from '../hooks/useFilePresence.js';
 import { useResizablePanel } from '../hooks/useResizablePanel.js';
+import { useEditorContext, resolveLanguage } from '../hooks/useEditorContext.js';
 
 /* ─────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -117,26 +121,6 @@ const MAX_EDIT_LOG = 50;
    first load after this shipped. */
 const SIDEBAR_WIDTH  = { storageKey: 'cg_sidebar_width',  defaultWidth: 220, minWidth: 160, maxWidth: 480 };
 const AI_PANEL_WIDTH = { storageKey: 'cg_ai_panel_width', defaultWidth: 320, minWidth: 260, maxWidth: 560 };
-
-/* Fallback language detection by file extension — the File model's
-   `language` field defaults to 'plaintext' for every new file, so
-   Monaco's syntax highlighting would otherwise be wrong for anything
-   the user creates via the explorer. */
-const EXT_LANG = {
-  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescript',
-  py: 'python',
-  java: 'java',
-  c: 'cpp', cc: 'cpp', cpp: 'cpp', h: 'cpp', hpp: 'cpp',
-  go: 'go',
-  json: 'json', md: 'markdown', html: 'html', css: 'css',
-};
-
-function resolveLanguage(file) {
-  if (file?.language && file.language !== 'plaintext') return file.language;
-  const ext = file?.name?.split('.').pop()?.toLowerCase();
-  return EXT_LANG[ext] ?? 'plaintext';
-}
 
 /* ─────────────────────────────────────────────────────────────────────
    ICONS
@@ -221,6 +205,16 @@ const Spinner = ({ size = 14 }) => (
     viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
     aria-hidden="true">
     <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+  </svg>
+);
+
+/* Phase 6.6 — file locking banner/explorer badge icon. */
+const LockIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
   </svg>
 );
 
@@ -523,12 +517,19 @@ export default function Editor() {
      applied. */
   const {
     connected, peers, getText, replaceText, cursors, sendCursor, typingSocketIds,
-    isLocalTyping,
+    isLocalTyping, lock,
   } = useYjs({
     fileId:     selectedFileId,
     user,
     onDocReady: handleDocReady,
+    projectId,
+    fileName:   selectedFile?.name,
   });
+
+  /* Phase 6.6 — file locking. `lock` is scoped to whichever file is
+     currently open (see useYjs.js); read-only kicks in only when
+     someone ELSE holds it — the owner edits normally. */
+  const isLockedByOther = lock.locked && !lock.byMe;
 
   /* Phase 6.4 — file presence. `isLocalTyping` (from useYjs, already
      debounced) drives the editing⇄viewing state this client
@@ -546,6 +547,19 @@ export default function Editor() {
   const sidebarResize = useResizablePanel({ ...SIDEBAR_WIDTH,  edge: 'right' });
   const aiPanelResize = useResizablePanel({ ...AI_PANEL_WIDTH, edge: 'left'  });
   const [aiChatOpen, setAiChatOpen] = useState(true);
+
+  /* Phase 6.0 — Team Chat. `rightTab` picks which of AIChatPanel/
+     TeamChatPanel is visible; both stay mounted underneath (see the
+     render below) so switching tabs never loses either panel's local
+     state (draft input, scroll position). `isActive` tells the hook
+     whether to count incoming messages as unread. */
+  const [rightTab, setRightTab] = useState('ai');
+  const { messages: teamMessages, loading: teamLoading, unreadCount: teamUnread,
+          sendMessage: sendTeamMessage } = useTeamChat({
+    projectId,
+    currentUserId: user?.id,
+    isActive: rightTab === 'team',
+  });
 
   useEffect(() => { sendCursorRef.current = sendCursor; }, [sendCursor]);
 
@@ -566,8 +580,22 @@ export default function Editor() {
   });
   useEffect(() => { cursorRenderingRef.current = cursorRendering; }, [cursorRendering]);
 
-const { messages: aiMessages, loading: aiLoading, send: sendAI,
+const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: explainAI,
+        reviewCode: reviewAI, refactorCode: refactorAI, generateCode: generateAI, retry: retryAI,
         clearHistory: clearAIHistory, contextNote } = useAI({ peers });
+
+  /* Phase 6.5 — Generate prompt modal. Opening it snapshots the
+     current editor context just for the modal's "using X as context"
+     hint text; the actual request re-reads the live buffer via
+     getEditorContext() at submit time, same as every other action. */
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generateHint, setGenerateHint] = useState({ hasSelection: false, fileName: '' });
+
+  /* Phase 6.2 — shared Editor Context layer. getEditorContext() reads
+     the live Monaco buffer/selection at call time; both handleAISend
+     (below) and handleExplain use it so neither duplicates the
+     selection-gathering logic. */
+  const { getEditorContext } = useEditorContext({ editorRef, selectedFile, projectId });
 
   const { output, running, outputOpen, setOutputOpen, run, cancel, clearOutput } = useExecution();
   /* Monaco mount */
@@ -697,86 +725,59 @@ async function handleRestoreSnapshot(snapshot) {
   }
 }
 
-  /* Send message to AI pair programmer */
-  // async function handleAISend(question) {
-  //   if (!question.trim() || aiLoading) return;
+  /* Send message to AI pair programmer — grounded in whatever file is
+     currently open plus any text the user has highlighted in Monaco,
+     so "explain this" questions have real selected code to answer
+     about instead of just the whole file. */
+  function handleAISend(question) {
+    const ctx = getEditorContext();
 
-  //   const code     = editorRef.current?.getValue() ?? '';
-  //   const language = doc?.language ?? 'javascript';
+    sendAI(question, {
+      projectId,
+      fileId: ctx?.fileId,
+      selectedCode: ctx?.selectedCode,
+      fileContent: ctx?.fileContent,
+      username: user?.username,
+    });
+  }
 
-  //   const userMsg = { id: Date.now(),     role: 'user',      content: question, username: user?.username };
-  //   const aiMsgId = Date.now() + 1;
-  //   const aiMsg   = { id: aiMsgId, role: 'assistant', content: '', streaming: true };
+  /* Explain action (Phase 6.2) — no question to type: mode (selection
+     vs whole file) is decided automatically by whether the editor
+     context has a selection. Phase 6.6: this (and Review/Refactor/
+     Generate below) is now triggered from inside AIChatPanel's own
+     Actions section rather than the navbar, so the panel is already
+     open and on the 'ai' tab by construction — no need to force
+     either state here anymore. */
+  function handleExplain() {
+    explainAI(getEditorContext(), { username: user?.username });
+  }
 
-  //   setAiMessages(prev => [...prev, userMsg, aiMsg]);
-  //   setAiLoading(true);
+  /* Review action (Phase 6.3) — same shared Editor Context and AI Chat
+     panel as Explain, just a different action/prompt on the backend. */
+  function handleReview() {
+    reviewAI(getEditorContext(), { username: user?.username });
+  }
 
-  //   try {
-  //     const token    = localStorage.getItem('cg_token');
-  //     const response = await fetch('/api/ai/ask', {
-  //       method:  'POST',
-  //       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-  //       body:    JSON.stringify({
-  //         question, code, language,
-  //         editLog:    editLogRef.current.slice(-20),
-  //         peers:      peers.map(p => p.name),
-  //         lastOutput: output
-  //           ? { stdout: output.stdout?.slice(0, 500), stderr: output.stderr?.slice(0, 500) }
-  //           : null,
-  //       }),
-  //     });
+  /* Refactor action (Phase 6.4) — same shared Editor Context and AI
+     Chat panel as Explain/Review, just a different action/prompt on
+     the backend. */
+  function handleRefactor() {
+    refactorAI(getEditorContext(), { username: user?.username });
+  }
 
-  //     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  /* Generate action (Phase 6.5) — the one action that needs a typed
+     instruction first, so this just opens the modal rather than firing
+     a request immediately. */
+  function handleOpenGenerate() {
+    const ctx = getEditorContext();
+    setGenerateHint({ hasSelection: !!ctx?.hasSelection, fileName: ctx?.fileName || '' });
+    setGenerateModalOpen(true);
+  }
 
-  //     const reader  = response.body.getReader();
-  //     const decoder = new TextDecoder();
-  //     let   buffer  = '';
-
-  //     while (true) {
-  //       const { done, value } = await reader.read();
-  //       if (done) break;
-  //       buffer += decoder.decode(value, { stream: true });
-  //       const lines = buffer.split('\n');
-  //       buffer = lines.pop() ?? '';
-
-  //       for (const line of lines) {
-  //         if (!line.startsWith('data: ')) continue;
-  //         const chunk = line.slice(6);
-  //         if (chunk === '[DONE]') continue;
-  //         setAiMessages(prev => prev.map(m =>
-  //           m.id === aiMsgId ? { ...m, content: m.content + chunk } : m
-  //         ));
-  //       }
-  //     }
-
-  //   } catch {
-  //     setAiMessages(prev => prev.map(m =>
-  //       m.id === aiMsgId ? { ...m, content: 'Something went wrong. Please try again.', streaming: false } : m
-  //     ));
-  //   } finally {
-  //     setAiMessages(prev => prev.map(m =>
-  //       m.id === aiMsgId ? { ...m, streaming: false } : m
-  //     ));
-  //     setAiLoading(false);
-  //   }
-  // }
-function handleAISend(question) {
-  sendAI(question, {
-    code:       editorRef.current?.getValue() ?? '',
-    language:   doc?.language ?? 'javascript',
-    editLog:    editLogRef.current.slice(-20),
-    peers,
-    lastOutput: output
-      ? { stdout: output.stdout?.slice(0, 500), stderr: output.stderr?.slice(0, 500) }
-      : null,
-    username:   user?.username,
-  });
-}
-  // const contextNote = useMemo(() => {
-  //   if (peers.length === 0) return 'Watching your edits';
-  //   if (peers.length === 1) return `Watching you and ${peers[0].name}`;
-  //   return `Watching ${peers.length + 1} people`;
-  // }, [peers]);
+  function handleGenerateSubmit(instruction) {
+    setGenerateModalOpen(false);
+    generateAI(getEditorContext(), instruction, { username: user?.username });
+  }
 
   /* Error page */
   if (docError) {
@@ -865,6 +866,17 @@ function handleAISend(question) {
         {/* Phase 6.4 — who else has this file open right now */}
         <FilePresenceBar presence={selectedFileId ? filePresence[selectedFileId] : undefined} />
 
+        {/* Phase 6.6 — file locking. Non-intrusive: a slim strip that
+            takes real layout space above the editor rather than
+            floating over the code, shown only while someone ELSE holds
+            the lock (the owner sees nothing extra and edits normally). */}
+        {isLockedByOther && (
+          <div className={styles.lock_banner} role="status">
+            <LockIcon />
+            Locked by {lock.username || 'another collaborator'}. Editing disabled.
+          </div>
+        )}
+
         <div className={styles.monaco_wrap}>
           {(saveError || workspaceNotice) && (
             <div
@@ -891,7 +903,7 @@ function handleAISend(question) {
               </div>
             }
             options={{
-              readOnly:                   !selectedFile,
+              readOnly:                   !selectedFile || isLockedByOther,
               fontSize:                   14,
               fontFamily:                 "'JetBrains Mono', monospace",
               fontLigatures:              true,
@@ -942,17 +954,61 @@ function handleAISend(question) {
           transition: aiPanelResize.dragging ? 'none' : undefined,
         }}
       >
-        {/* Never unmounted while collapsed — preserves AISidebar's own
-            message list / input state so reopening restores exactly
-            where the conversation left off. */}
-        <AISidebar
-  messages={aiMessages}
-  loading={aiLoading}
-  onSend={handleAISend}
-  onClear={clearAIHistory}
-  contextNote={contextNote}
-  currentUser={user}
-/>
+        {/* Phase 6.0 — AI/Team tab strip. Both panels below stay
+            mounted regardless of which tab is active (display:none on
+            the inactive one, never a conditional unmount) so switching
+            tabs never loses either panel's own state — AIChatPanel's
+            draft input, TeamChatPanel's scroll position. */}
+        <div className={styles.rp_tabs} role="tablist" aria-label="AI and Team panels">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rightTab === 'ai'}
+            className={`${styles.rp_tab} ${rightTab === 'ai' ? styles.rp_tab_active : ''}`}
+            onClick={() => setRightTab('ai')}
+          >
+            <span aria-hidden="true">🤖</span> AI
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={rightTab === 'team'}
+            className={`${styles.rp_tab} ${rightTab === 'team' ? styles.rp_tab_active : ''}`}
+            onClick={() => setRightTab('team')}
+          >
+            <span aria-hidden="true">💬</span> Team
+            {rightTab !== 'team' && teamUnread > 0 && (
+              <span className={styles.rp_tab_badge}>{teamUnread > 99 ? '99+' : teamUnread}</span>
+            )}
+          </button>
+        </div>
+
+        <div className={styles.rp_panels}>
+          <div className={`${styles.rp_panel} ${rightTab !== 'ai' ? styles.rp_panel_hidden : ''}`}>
+            <AIChatPanel
+              messages={aiMessages}
+              loading={aiLoading}
+              onSend={handleAISend}
+              onRetry={retryAI}
+              onClear={clearAIHistory}
+              contextNote={contextNote}
+              onExplain={handleExplain}
+              onReview={handleReview}
+              onRefactor={handleRefactor}
+              onGenerate={handleOpenGenerate}
+              actionsDisabled={!selectedFile}
+            />
+          </div>
+          <div className={`${styles.rp_panel} ${rightTab !== 'team' ? styles.rp_panel_hidden : ''}`}>
+            <TeamChatPanel
+              messages={teamMessages}
+              loading={teamLoading}
+              onSend={sendTeamMessage}
+              currentUser={user}
+            />
+          </div>
+        </div>
+
         <OutputPanel
           output={output}
           running={running}
@@ -974,6 +1030,17 @@ function handleAISend(question) {
       saving={savingSnapshot}
       onRestore={handleRestoreSnapshot}
       restoringId={restoringId}
+    />
+
+    {/* Generate prompt modal — Phase 6.5, collects the instruction
+        before a Generate request is sent; the request itself lands in
+        the same AI Chat panel as every other action. */}
+    <GeneratePromptModal
+      open={generateModalOpen}
+      onClose={() => setGenerateModalOpen(false)}
+      onSubmit={handleGenerateSubmit}
+      hasSelection={generateHint.hasSelection}
+      fileName={generateHint.fileName}
     />
 
   </div>

@@ -33,6 +33,17 @@ const getSharedText = (roomId) => {
 };
 
 /**
+ * Whether a room's Y.Doc is currently active in memory — unlike
+ * getDocument, never creates one. Used by the REST save path (see
+ * fileService.updateFileContent) to decide whether it's safe to force
+ * a persistence flush: flushing a doc that doesn't exist would call
+ * getDocument anyway and create a brand-new EMPTY one, then persist
+ * that empty state over whatever was correctly saved before — this
+ * guard is what prevents that.
+ */
+const hasDocument = (roomId) => documents.has(roomId);
+
+/**
  * Remove document
  */
 const removeDocument = (roomId) => {
@@ -45,4 +56,5 @@ module.exports = {
     getDocument,
     getSharedText,
     removeDocument,
+    hasDocument,
 };

@@ -325,6 +325,22 @@
   position: relative;
 }
 
+/* Phase 6.6 — file lock banner. A flex sibling of .monaco_wrap (same
+   layout approach as FilePresenceBar above) rather than an absolute
+   overlay, so it never covers any code — "non-intrusive" per spec. */
+.lock_banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #FDE68A;
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+}
+
 /* Monaco loading state */
 .editor_loading {
   height: 100%;
@@ -359,6 +375,83 @@
    the border so a collapsed panel doesn't leave a stray 1px seam. */
 .right_panel_collapsed {
   border-left: none;
+}
+
+/* ── Phase 6.0 — AI/Team tab strip ────────────────────────────────── */
+.rp_tabs {
+  flex-shrink: 0;
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 11, 20, 0.4);
+}
+
+.rp_tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748B;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  position: relative;
+}
+.rp_tab:hover { color: #94A3B8; }
+
+.rp_tab_active {
+  color: #E2E8F0;
+  border-bottom-color: #3B82F6;
+}
+
+.rp_tab_badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Both AIChatPanel and TeamChatPanel stay mounted here at all times;
+   the inactive one is hidden via display:none (never unmounted) so
+   switching tabs preserves each panel's own local state. */
+.rp_panels {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;                  /* Phase 6.6 — without this, a long
+                                     unbroken line (URL, code, table) in
+                                     AIChatPanel can force this column
+                                     flex item wider than .right_panel,
+                                     defeating its own overflow:hidden */
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.rp_panel {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;                  /* Phase 6.6 — same flex min-width fix,
+                                     one level down */
+  display: flex;
+  flex-direction: column;
+}
+
+.rp_panel_hidden {
+  display: none;
 }
 
 /* ── AI sidebar ──────────────────────────── */

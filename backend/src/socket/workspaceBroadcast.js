@@ -142,6 +142,38 @@ const broadcastFolderMoved = async (projectId, folder, username) => {
   });
 };
 
+/**
+ * Phase 6.6 — file locking's project-wide echo. Called from
+ * socketEvents.js's FILE_LOCK/FILE_UNLOCK handlers (and its
+ * disconnect/room-leave cleanup) right after fileLockManager.js
+ * actually changes lock state, mirroring the exact same emit +
+ * persistActivity pattern every other mutation above already uses —
+ * so a lock/unlock shows up in the Explorer (lock icon, via the
+ * WORKSPACE_FILE_LOCKED/UNLOCKED broadcast) and in the activity feed
+ * (via persistActivity) without a second notification system.
+ */
+const broadcastFileLocked = async (projectId, fileId, fileName, username) => {
+  emit(projectId, SOCKET_EVENTS.WORKSPACE_FILE_LOCKED, {
+    fileId,
+    name: fileName,
+    username,
+  });
+  await persistActivity({
+    projectId, username, operation: "locked", targetType: "file", targetName: fileName,
+  });
+};
+
+const broadcastFileUnlocked = async (projectId, fileId, fileName, username) => {
+  emit(projectId, SOCKET_EVENTS.WORKSPACE_FILE_UNLOCKED, {
+    fileId,
+    name: fileName,
+    username,
+  });
+  await persistActivity({
+    projectId, username, operation: "unlocked", targetType: "file", targetName: fileName,
+  });
+};
+
 module.exports = {
   broadcastFileCreated,
   broadcastFileRenamed,
@@ -151,4 +183,6 @@ module.exports = {
   broadcastFolderRenamed,
   broadcastFolderDeleted,
   broadcastFolderMoved,
+  broadcastFileLocked,
+  broadcastFileUnlocked,
 };

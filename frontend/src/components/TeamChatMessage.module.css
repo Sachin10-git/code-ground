@@ -1,0 +1,102 @@
+/*
+ * TeamChatMessage.module.css — Code Ground Team Chat message bubble
+ *
+ * Same design tokens as the rest of the app:
+ *   Surface:       #0D1117
+ *   Surface 2:     #161B22
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ *
+ * Own vs. other-user messages are visually distinct the way common
+ * chat apps do it: the current user's messages align right with a
+ * blue-tinted bubble; everyone else's align left with the neutral
+ * surface colour. Markdown/code-block rendering itself lives in the
+ * shared MarkdownLite component (markdown/MarkdownLite.module.css) —
+ * this file only owns the bubble/avatar/meta chrome around it.
+ */
+
+.msg {
+  display: flex;
+  gap: 8px;
+  padding: 5px 12px;
+  animation: fade_in 0.15s ease;
+}
+
+.msg_other { flex-direction: row; }
+.msg_own   { flex-direction: row-reverse; }
+
+.msg_avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #080B14;
+  font-family: 'Inter', sans-serif;
+  margin-top: 2px;
+}
+
+.msg_body {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  min-width: 0;
+}
+
+.msg_own .msg_body   { align-items: flex-end; }
+.msg_other .msg_body { align-items: flex-start; }
+
+.msg_meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 2px 2px;
+}
+
+.msg_own .msg_meta { flex-direction: row-reverse; }
+
+.msg_username {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94A3B8;
+}
+
+.msg_time {
+  font-size: 0.625rem;
+  color: #334155;
+}
+
+.msg_content {
+  border-radius: 12px;
+  padding: 7px 11px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #E2E8F0;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.msg_other .msg_content {
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.msg_own .msg_content {
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+}
+
+/* ── Reduced motion ──────────────────────── */
+@keyframes fade_in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg { animation: none; }
+}

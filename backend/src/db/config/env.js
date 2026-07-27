@@ -34,6 +34,8 @@ const env = {
     EMAIL_FROM: process.env.EMAIL_FROM,
 
     CLIENT_URL: process.env.CLIENT_URL,
+
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
 };
 
 module.exports = env;

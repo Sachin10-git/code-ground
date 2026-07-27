@@ -2,12 +2,13 @@
  * hooks/useFilePresence.js — Phase 6.4: file presence & conflict
  * awareness
  *
- * Owns its own Socket.IO connection to the `/workspace` namespace —
- * deliberately separate from useWorkspaceSync's (FileExplorer's tree
- * sync) and useYjs's (per-file Yjs collaboration) connections, same
- * philosophy as those two: a different connection means this feature
- * can never regress the other two, and vice versa.
+ * Shares the same `/workspace` connection as useWorkspaceSync and
+ * useTeamChat (see acquireWorkspaceSocket in services/workspaceSocket.js)
+ * — deliberately still separate from useYjs's per-file Yjs connection,
+ * which lives on the default namespace for unrelated reasons (CRDT sync
+ * vs. project-room broadcasts).
  *
+
  * Called once from Editor.jsx (the page that already knows both the
  * `projectId` and whichever `fileId` is currently open), not from
  * FileExplorer — the Explorer needs presence for EVERY file in the
@@ -43,7 +44,8 @@
 
 import { useRef, useState, useEffect } from 'react';
 import {
-  createWorkspaceSocket,
+  acquireWorkspaceSocket,
+  releaseWorkspaceSocket,
   joinProjectRoom,
   leaveProjectRoom,
   announceFilePresence,
@@ -56,17 +58,17 @@ export function useFilePresence({ projectId, fileId, isEditing }) {
 
   const [filePresence, setFilePresence] = useState({});
 
-  /* Connection lifecycle — one socket for the lifetime of the editor
-     page, kept alive across both project switches and file switches
-     (mirrors useWorkspaceSync's connect-once-then-join-per-project
-     split). */
+  /* Connection lifecycle — acquires the shared `/workspace` socket for
+     the lifetime of the editor page (mirrors useWorkspaceSync's
+     connect-once-then-join-per-project split), releasing it on
+     unmount. */
   const [socketReadyTick, forceRoomEffect] = useState(0);
   useEffect(() => {
     let cancelled = false;
 
-    createWorkspaceSocket().then((socket) => {
+    acquireWorkspaceSocket().then((socket) => {
       if (cancelled) {
-        socket.disconnect();
+        releaseWorkspaceSocket();
         return;
       }
       socketRef.current = socket;
@@ -75,7 +77,7 @@ export function useFilePresence({ projectId, fileId, isEditing }) {
 
     return () => {
       cancelled = true;
-      socketRef.current?.disconnect();
+      if (socketRef.current) releaseWorkspaceSocket();
       socketRef.current = null;
     };
   }, []);

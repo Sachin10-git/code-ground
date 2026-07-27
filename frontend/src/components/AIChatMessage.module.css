@@ -1,0 +1,207 @@
+/*
+ * AIChatMessage.module.css — Code Ground AI chat message bubble
+ *
+ * Same tokens and bubble layout as TeamChatMessage.module.css — the AI
+ * plays the role of "the other party" (left-aligned, neutral surface),
+ * the developer's own messages align right with the blue-tinted
+ * bubble, exactly like Team Chat. Markdown/code-block rendering itself
+ * lives in the shared MarkdownLite component; this file only owns the
+ * bubble/avatar/meta chrome plus AI-specific bits (thinking dots, error
+ * box, copy-full-message button).
+ */
+
+.msg {
+  display: flex;
+  gap: 8px;
+  padding: 5px 12px;
+  animation: fade_in 0.15s ease;
+}
+
+.msg_ai   { flex-direction: row; }
+.msg_user { flex-direction: row-reverse; }
+
+.msg_avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #080B14;
+  font-family: 'Inter', sans-serif;
+  margin-top: 2px;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai_logo_mark {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #3B82F6;
+}
+
+.msg_body {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  min-width: 0;
+}
+
+.msg_user .msg_body { align-items: flex-end; }
+.msg_ai .msg_body    { align-items: flex-start; }
+
+.msg_meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 2px 2px;
+}
+
+.msg_user .msg_meta { flex-direction: row-reverse; }
+
+.msg_label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94A3B8;
+}
+
+.msg_time {
+  font-size: 0.625rem;
+  color: #334155;
+}
+
+/* ── Action badge — marks a message as an Explain/Review (etc.)
+   request/reply rather than a normal chat turn (Phase 6.2/6.3). ── */
+.action_badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #93C5FD;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.msg_text {
+  border-radius: 12px;
+  padding: 7px 11px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #E2E8F0;
+  word-break: break-word;
+  margin: 0;
+  white-space: pre-wrap;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+}
+
+.msg_content {
+  border-radius: 12px;
+  padding: 7px 11px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #E2E8F0;
+  word-break: break-word;
+  min-width: 0;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Thinking indicator — shown while waiting for the (non-streaming)
+   response. Three dots, no partial content to render. ── */
+.thinking_dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  width: fit-content;
+}
+.thinking_dots span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #334155;
+  animation: bounce 1.2s ease-in-out infinite;
+}
+.thinking_dots span:nth-child(1) { animation-delay: 0s; }
+.thinking_dots span:nth-child(2) { animation-delay: 0.18s; }
+.thinking_dots span:nth-child(3) { animation-delay: 0.36s; }
+
+/* ── Error box — shown instead of content on a failed request ── */
+.error_box {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #F87171;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.error_box svg { flex-shrink: 0; }
+.error_box span { flex: 1; min-width: 120px; }
+
+.retry_btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: #F87171;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.retry_btn:hover { background: rgba(248, 113, 113, 0.22); }
+
+/* ── Copy full response ──────────────────── */
+.msg_copy {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  background: transparent;
+  border: none;
+  color: #334155;
+  font-size: 0.6875rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.msg_copy:hover {
+  color: #94A3B8;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Keyframes ────────────────────────────── */
+@keyframes fade_in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%           { transform: translateY(-5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg, .thinking_dots span { animation: none; }
+}

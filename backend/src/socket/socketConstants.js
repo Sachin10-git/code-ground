@@ -108,6 +108,41 @@ const SOCKET_EVENTS = {
 
     WORKSPACE_FILE_PRESENT: "workspace:file-present",
     WORKSPACE_FILE_ABSENT: "workspace:file-absent",
+
+    /**
+     * -------------------------------------------------------
+     * File Locking (Phase 6.6)
+     * -------------------------------------------------------
+     * The actual lock/unlock mutex (FILE_LOCK/FILE_UNLOCK/FILE_LOCKED/
+     * FILE_UNLOCKED/FILE_LOCK_FAILED above) lives on the default
+     * namespace, scoped to one file's Yjs room — a socket only learns
+     * about a lock if it has that specific file open. These two are
+     * the project-wide echo of the same lock/unlock, broadcast on the
+     * `/workspace` namespace (like WORKSPACE_FILE_* above) so the
+     * Explorer can show a lock icon for ANY file in the project, not
+     * just the one currently open, and so lock/unlock shows up in the
+     * activity feed the same way create/rename/move/delete already do.
+     * -------------------------------------------------------
+     */
+    WORKSPACE_FILE_LOCKED: "workspace:file-locked",
+    WORKSPACE_FILE_UNLOCKED: "workspace:file-unlocked",
+
+    /**
+     * -------------------------------------------------------
+     * Team Chat (Phase 6.0)
+     * -------------------------------------------------------
+     * Also on the `/workspace` namespace, reusing the same
+     * project room WORKSPACE_JOIN already puts the socket in —
+     * a project *is* a chat room, so there's no separate
+     * "join chat" step. History is pushed to a socket the
+     * moment it joins (see workspaceSocket.js), the same way
+     * file presence catches a joining socket up on existing
+     * state.
+     * -------------------------------------------------------
+     */
+    TEAM_CHAT_SEND: "team-chat:send",
+    TEAM_CHAT_MESSAGE: "team-chat:message",
+    TEAM_CHAT_HISTORY: "team-chat:history",
 };
 
 module.exports = SOCKET_EVENTS;

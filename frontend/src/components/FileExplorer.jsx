@@ -78,6 +78,13 @@ const FileIcon = () => (
     <polyline points="14 2 14 8 20 8" />
   </svg>
 );
+const LockIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
 const PlusIcon = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -135,6 +142,20 @@ function FilePresenceBadge({ presence }) {
   return (
     <span className={styles.presence_badge} title={title}>
       👥 {entries.length}
+    </span>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   FileLockBadge — Phase 6.6. `lock` is this one file's slice of
+   useWorkspaceSync's fileLocks map: { username, userId } | undefined.
+   Files only (a folder has no content to lock).
+───────────────────────────────────────────────────────────────────── */
+function FileLockBadge({ lock }) {
+  if (!lock?.username) return null;
+  return (
+    <span className={styles.lock_badge} title={`Locked by ${lock.username}`}>
+      <LockIcon />
     </span>
   );
 }
@@ -261,7 +282,7 @@ function InlineInput({ initialValue, onSubmit, onCancel }) {
 /* ─────────────────────────────────────────────────────────────────────
    FileRow
 ───────────────────────────────────────────────────────────────────── */
-function FileRow({ file, depth, selectedFileId, renaming, dragOverId, filePresence, actions }) {
+function FileRow({ file, depth, selectedFileId, renaming, dragOverId, filePresence, fileLocks, actions }) {
   const isRenaming = renaming?.type === 'file' && renaming.id === file._id;
   const isSelected = selectedFileId === file._id;
   const isDragging = dragOverId?.draggingId === file._id;
@@ -289,6 +310,7 @@ function FileRow({ file, depth, selectedFileId, renaming, dragOverId, filePresen
       )}
 
       {!isRenaming && <FilePresenceBadge presence={filePresence?.[file._id]} />}
+      {!isRenaming && <FileLockBadge lock={fileLocks?.[file._id]} />}
 
       {!isRenaming && (
         <span className={styles.row_actions} onClick={e => e.stopPropagation()}>
@@ -312,7 +334,7 @@ function FileRow({ file, depth, selectedFileId, renaming, dragOverId, filePresen
    from a flat array). Also a drag-and-drop target: dropping a file or
    folder here moves it into this folder.
 ───────────────────────────────────────────────────────────────────── */
-function FolderRow({ folderId, depth, tree, collapsedIds, selectedFileId, selectedFolderId, creating, renaming, dragOverId, filePresence, actions }) {
+function FolderRow({ folderId, depth, tree, collapsedIds, selectedFileId, selectedFolderId, creating, renaming, dragOverId, filePresence, fileLocks, actions }) {
   const folder = tree.foldersById[folderId];
   if (!folder) return null;
 
@@ -384,14 +406,14 @@ function FolderRow({ folderId, depth, tree, collapsedIds, selectedFileId, select
               collapsedIds={collapsedIds} selectedFileId={selectedFileId}
               selectedFolderId={selectedFolderId}
               creating={creating} renaming={renaming} dragOverId={dragOverId}
-              filePresence={filePresence} actions={actions}
+              filePresence={filePresence} fileLocks={fileLocks} actions={actions}
             />
           ))}
           {folder.fileIds.map(fileId => (
             <FileRow
               key={fileId} file={tree.filesById[fileId]} depth={depth + 1}
               selectedFileId={selectedFileId} renaming={renaming} dragOverId={dragOverId}
-              filePresence={filePresence} actions={actions}
+              filePresence={filePresence} fileLocks={fileLocks} actions={actions}
             />
           ))}
           {creating?.parentId === folderId && (
@@ -752,7 +774,7 @@ export default function FileExplorer({
     });
   }, []);
 
-  const { activeUsers, reportActivity, activity } = useWorkspaceSync({
+  const { activeUsers, reportActivity, activity, fileLocks } = useWorkspaceSync({
     projectId,
     onResync: () => loadTree(),
     onFileCreated:   useCallback((file)   => setTree(prev => insertFile(prev, file)), []),
@@ -839,14 +861,14 @@ export default function FileExplorer({
                 collapsedIds={collapsedIds} selectedFileId={selectedFileId}
                 selectedFolderId={selectedFolderId}
                 creating={creating} renaming={renaming} dragOverId={dragOverId}
-                filePresence={filePresence} actions={actions}
+                filePresence={filePresence} fileLocks={fileLocks} actions={actions}
               />
             ))}
             {tree.root.fileIds.map(id => (
               <FileRow
                 key={id} file={tree.filesById[id]} depth={0}
                 selectedFileId={selectedFileId} renaming={renaming} dragOverId={dragOverId}
-                filePresence={filePresence} actions={actions}
+                filePresence={filePresence} fileLocks={fileLocks} actions={actions}
               />
             ))}
 

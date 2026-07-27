@@ -38,7 +38,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import api from '../utils/api.js';
 import {
-  createWorkspaceSocket,
+  acquireWorkspaceSocket,
+  releaseWorkspaceSocket,
   joinProjectRoom,
   leaveProjectRoom,
   reportWorkspaceActivity,
@@ -94,6 +95,14 @@ export function useWorkspaceSync({
      timer ids aren't render data. */
   const [activeUsers, setActiveUsers] = useState({});
   const activityTimersRef = useRef({});
+
+  /* Phase 6.6 — file locking: { [fileId]: { username, userId } } for
+     every file in this project currently locked by someone editing it.
+     Fed by WORKSPACE_FILE_LOCKED/UNLOCKED (the project-wide echo of the
+     per-file-room lock useYjs.js also tracks — see that hook's
+     docstring), plus a WORKSPACE_JOIN catch-up from the backend so
+     locks set before this socket joined still show up immediately. */
+  const [fileLocks, setFileLocks] = useState({});
 
   const clearActivityTimers = () => {
     for (const timerId of Object.values(activityTimersRef.current)) {
@@ -153,18 +162,20 @@ export function useWorkspaceSync({
     onFolderCreated, onFolderRenamed, onFolderDeleted, onFolderMoved,
   ]);
 
-  /* Connection lifecycle — one socket per FileExplorer mount, kept
-     alive across project switches (mirrors useYjs's connection/room
-     split: connect once, then join/leave rooms as the target changes).
-     Socket creation is async (dynamic import), so a cancelled flag
-     guards against the component unmounting before it resolves. */
+  /* Connection lifecycle — acquires the shared `/workspace` socket
+     (see services/workspaceSocket.js) once per FileExplorer mount and
+     releases it on unmount; the connection itself may outlive this
+     mount if useTeamChat's TeamChatPanel is still holding a reference
+     (Phase 6.0 — Team Chat reuses this exact connection instead of
+     opening a second one). Socket acquisition is async, so a cancelled
+     flag guards against the component unmounting before it resolves. */
   const [socketReadyTick, forceRoomEffect] = useState(0);
   useEffect(() => {
     let cancelled = false;
 
-    createWorkspaceSocket().then((socket) => {
+    acquireWorkspaceSocket().then((socket) => {
       if (cancelled) {
-        socket.disconnect();
+        releaseWorkspaceSocket();
         return;
       }
       socketRef.current = socket;
@@ -176,7 +187,7 @@ export function useWorkspaceSync({
 
     return () => {
       cancelled = true;
-      socketRef.current?.disconnect();
+      if (socketRef.current) releaseWorkspaceSocket();
       socketRef.current = null;
     };
   }, []);
@@ -225,6 +236,37 @@ export function useWorkspaceSync({
       }, ACTIVITY_EXPIRY_MS);
     }
 
+    /* Phase 6.6 — file locking. WORKSPACE_FILE_LOCKED/UNLOCKED double as
+       both the WORKSPACE_JOIN catch-up for pre-existing locks AND the
+       live broadcast for a lock/unlock that just happened (same event,
+       same shape — mirrors how filePresenceManager's catch-up reuses
+       WORKSPACE_FILE_PRESENT). `fileLocks` itself is updated either
+       way — Explorer icons should always reflect current state.
+       Feeding the *activity feed* only happens once history has
+       already loaded (`historyLoadedRef.current`): catch-up fires
+       synchronously on join, always before that history GET resolves,
+       so gating on it skips catch-up (that lock's history entry is
+       already covered by the GET response itself) while still
+       capturing a genuinely live lock/unlock — same distinction
+       filePresenceManager's catch-up gets "for free" by simply never
+       being logged to the feed at all. */
+    function onFileLocked({ fileId, username, userId, name }) {
+      if (!fileId) return;
+      setFileLocks((prev) => ({ ...prev, [fileId]: { username, userId } }));
+      if (historyLoadedRef.current) recordActivity('file', 'locked', { name, username });
+    }
+
+    function onFileUnlocked({ fileId, username, name }) {
+      if (!fileId) return;
+      setFileLocks((prev) => {
+        if (!(fileId in prev)) return prev;
+        const next = { ...prev };
+        delete next[fileId];
+        return next;
+      });
+      if (historyLoadedRef.current) recordActivity('file', 'unlocked', { name, username });
+    }
+
     const handlers = {
       [WORKSPACE_EVENTS.FILE_CREATED]:   (payload) => { callbacksRef.current.onFileCreated?.(payload); recordActivity('file', 'created', payload); },
       [WORKSPACE_EVENTS.FILE_RENAMED]:   (payload) => { callbacksRef.current.onFileRenamed?.(payload); recordActivity('file', 'renamed', payload); },
@@ -235,6 +277,8 @@ export function useWorkspaceSync({
       [WORKSPACE_EVENTS.FOLDER_DELETED]: (payload) => { callbacksRef.current.onFolderDeleted?.(payload); recordActivity('folder', 'deleted', payload); },
       [WORKSPACE_EVENTS.FOLDER_MOVED]:   (payload) => { callbacksRef.current.onFolderMoved?.(payload); recordActivity('folder', 'moved', payload); },
       [WORKSPACE_EVENTS.USER_ACTIVE]:    onUserActive,
+      [WORKSPACE_EVENTS.FILE_LOCKED]:    onFileLocked,
+      [WORKSPACE_EVENTS.FILE_UNLOCKED]:  onFileUnlocked,
     };
 
     socket.on('connect', handleConnect);
@@ -279,6 +323,11 @@ export function useWorkspaceSync({
       clearActivityTimers();
       setActiveUsers({});
 
+      /* Phase 6.6 — same idea for locks: the next project's own
+         WORKSPACE_JOIN catch-up repopulates this from scratch, so a
+         stale lock from the previous project should never linger. */
+      setFileLocks({});
+
       /* Phase 6.4 — the *next* project's effect run fetches its own
          history and repopulates `activity`; until then (and for a
          plain unmount) there's nothing to show. */
@@ -292,5 +341,5 @@ export function useWorkspaceSync({
     reportWorkspaceActivity(socketRef.current, projectId);
   }, [projectId]);
 
-  return { activeUsers, reportActivity, activity };
+  return { activeUsers, reportActivity, activity, fileLocks };
 }

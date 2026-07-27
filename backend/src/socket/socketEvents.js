@@ -26,7 +26,14 @@ const {
 const {
     lockFile,
     unlockFile,
+    releaseLocksForSocket,
+    getLock,
 } = require("./fileLockManager");
+
+const {
+    broadcastFileLocked,
+    broadcastFileUnlocked,
+} = require("./workspaceBroadcast");
 
 const {
     broadcastChanges,
@@ -113,13 +120,21 @@ const registerSocketEvents = (io) => {
 
     const doc = getDocument(roomId);
 
-    const recovered = await recoverDocument(
-        roomId,
-        doc
-    );
+    /* Prefer the debounced CRDTDocument save (persisted within ~2s of
+       every edit pause — see debounceManager/liveUpdateManager) over a
+       periodic CRDTSnapshot (taken every 5 minutes at most — see
+       snapshotScheduler). The snapshot used to be tried FIRST here,
+       which meant that for any room old enough to have ever produced
+       one snapshot, every future rejoin silently reverted to that
+       stale point-in-time instead of the much fresher debounced save —
+       edits (including ones a user had just clicked "Save" to persist)
+       would appear to vanish on the next reload. Snapshot recovery is
+       now only a fallback for a room that has no debounced save yet
+       (e.g. recovering from a crash before the first debounce fired). */
+    const loaded = await loadDocument(roomId, doc);
 
-    if (!recovered) {
-        await loadDocument(roomId, doc);
+    if (!loaded) {
+        await recoverDocument(roomId, doc);
     }
 
     await ensureFileSeed(roomId, doc);
@@ -140,6 +155,20 @@ const registerSocketEvents = (io) => {
         Y.encodeStateAsUpdate(doc)
     );
 
+    /* Phase 6.6 — lock catch-up. A socket joining this file's room
+       after someone else already locked it (by editing) needs to know
+       immediately — it shouldn't have to try editing itself and get a
+       FILE_LOCK_FAILED just to find out. Mirrors filePresenceManager's
+       catch-up pattern on the /workspace namespace. */
+    const existingLock = getLock(roomId);
+    if (existingLock) {
+        socket.emit(SOCKET_EVENTS.FILE_LOCKED, {
+            fileId: roomId,
+            lockedBy: existingLock.username,
+            userId: existingLock.userId,
+        });
+    }
+
     console.log(`${socket.id} joined ${roomId}`);
 
     io.to(roomId).emit(
@@ -152,6 +181,18 @@ const registerSocketEvents = (io) => {
     socket.on(SOCKET_EVENTS.ROOM_LEAVE, async (roomId) => {
 
     leaveRoom(socket, roomId);
+
+    /* Phase 6.6 — release this socket's lock (if any) on the file it's
+       leaving. Covers "switching files" and "closing the file" — a
+       plain disconnect is covered separately below via
+       releaseLocksForSocket, since ROOM_LEAVE is never emitted for a
+       hard disconnect (tab close, crash, network drop). */
+    const { released, lock } = unlockFile(io, socket, roomId, roomId);
+    if (released && lock.projectId) {
+        await broadcastFileUnlocked(lock.projectId, roomId, lock.fileName, lock.username).catch((err) => {
+            console.error("[socketEvents] Failed to broadcast unlock to workspace:", err);
+        });
+    }
 
     const room = io.sockets.adapter.rooms.get(roomId);
 
@@ -222,15 +263,25 @@ socket.on(
 
   socket.on(
     SOCKET_EVENTS.FILE_LOCK,
-    ({ roomId, fileId }) => {
-        lockFile(io, socket, roomId, fileId);
+    async ({ roomId, fileId, projectId, fileName }) => {
+        const { acquired, lock } = lockFile(io, socket, roomId, fileId, projectId, fileName);
+        if (acquired && lock.projectId) {
+            await broadcastFileLocked(lock.projectId, fileId, lock.fileName, lock.username).catch((err) => {
+                console.error("[socketEvents] Failed to broadcast lock to workspace:", err);
+            });
+        }
     }
 );
 
   socket.on(
     SOCKET_EVENTS.FILE_UNLOCK,
-    ({ roomId, fileId }) => {
-        unlockFile(io, socket, roomId, fileId);
+    async ({ roomId, fileId }) => {
+        const { released, lock } = unlockFile(io, socket, roomId, fileId);
+        if (released && lock.projectId) {
+            await broadcastFileUnlocked(lock.projectId, fileId, lock.fileName, lock.username).catch((err) => {
+                console.error("[socketEvents] Failed to broadcast unlock to workspace:", err);
+            });
+        }
     }
 );
 
@@ -271,6 +322,20 @@ socket.on(
 );
 
   socket.on("disconnecting", async () => {
+
+    /* Phase 6.6 — release every lock this socket holds, across every
+       file, before anything else. This is the one path that catches a
+       hard disconnect (crash, tab close, network drop) — ROOM_LEAVE is
+       never emitted for those, so without this a lock would outlive
+       its owner's connection (a stale lock, blocking everyone else
+       from editing that file forever). */
+    const releasedLocks = releaseLocksForSocket(io, socket);
+    for (const { fileId, lock } of releasedLocks) {
+        if (!lock.projectId) continue;
+        await broadcastFileUnlocked(lock.projectId, fileId, lock.fileName, lock.username).catch((err) => {
+            console.error("[socketEvents] Failed to broadcast unlock to workspace:", err);
+        });
+    }
 
     const rooms = [...socket.rooms];
 

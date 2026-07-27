@@ -51,6 +51,19 @@
  *   already-debounced editing/viewing transition into
  *   useFilePresence.js as its `isEditing` input, instead of that hook
  *   re-deriving typing state from scratch.
+ *
+ *   `lock` (Phase 6.6, returned) — { locked, byMe, username, userId }
+ *   for whichever file this room currently is. A lock is requested
+ *   automatically the first time a LOCAL edit lands (not merely on
+ *   open/view — see onLocalUpdate) and released on room cleanup (file
+ *   switch/close); a hard disconnect is covered server-side instead
+ *   (see socketEvents.js's "disconnecting" handler), since a plain
+ *   socket drop never reaches this hook's own cleanup. Callers pass
+ *   `projectId`/`fileName` in so the lock request/broadcast can reach
+ *   the `/workspace` namespace's Explorer + activity feed too (see
+ *   workspaceBroadcast.js) — Editor.jsx uses `lock` to set Monaco's
+ *   readOnly option and show the "Locked by X" banner when someone
+ *   else holds it.
  */
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -75,7 +88,18 @@ const SOCKET_EVENTS = {
   USER_STOPPED_TYPING: 'editor:user-stopped-typing',
   CURSOR_MOVE:         'editor:cursor-move',
   CURSOR_UPDATED:      'editor:cursor-updated',
+  /* Phase 6.6 — file locking */
+  FILE_LOCK:           'editor:file-lock',
+  FILE_UNLOCK:         'editor:file-unlock',
+  FILE_LOCKED:         'editor:file-locked',
+  FILE_UNLOCKED:       'editor:file-unlocked',
+  FILE_LOCK_FAILED:    'editor:file-lock-failed',
 };
+
+/* Default "no lock" shape — reused as the reset value on every room
+   switch (see the per-file room effect below) and as this hook's
+   initial state. */
+const NO_LOCK = { locked: false, byMe: false, username: null, userId: null };
 
 /* Cap outgoing cursor-position emits to ~30fps (the low end of the
    30-60fps range) so rapid mouse/keyboard cursor movement never floods
@@ -123,7 +147,7 @@ const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 10000];
    keystroke before fading out. */
 const TYPING_STOP_DELAY = 1500;
 
-export function useYjs({ fileId, user, onDocReady }) {
+export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
   const socketRef = useRef(null);
   const ydocRef   = useRef(null);
   const YRef      = useRef(null); // cached `yjs` module namespace
@@ -150,6 +174,10 @@ export function useYjs({ fileId, user, onDocReady }) {
      socketId (not userId — each connection has its own caret).
      { [socketId]: { userId, username, position: {lineNumber, column} } } */
   const [cursors, setCursors] = useState({});
+  /* Phase 6.6 — file locking. { locked, byMe, username, userId } for
+     whichever file this room currently is; reset to NO_LOCK on every
+     room switch (see the per-file room effect below). */
+  const [lock, setLock] = useState(NO_LOCK);
 
   /* The backend's editor:user-typing/stopped-typing events identify the
      typist by socketId, not userId, and peers are keyed by userId (see
@@ -365,6 +393,35 @@ export function useYjs({ fileId, user, onDocReady }) {
       });
     }
 
+    /* Phase 6.6 — file locking. A lock is requested at most once per
+       room session, the first time a LOCAL edit actually happens
+       (never merely opening/viewing a file) — lockRequested guards
+       against re-emitting FILE_LOCK on every subsequent keystroke. */
+    let lockRequested = false;
+
+    function onFileLocked({ fileId: lockedFileId, lockedBy, userId: lockUserId }) {
+      if (cancelled || lockedFileId !== fileId) return;
+      setLock({ locked: true, byMe: !!user?.id && lockUserId === user.id, username: lockedBy, userId: lockUserId ?? null });
+    }
+
+    function onFileUnlocked({ fileId: unlockedFileId }) {
+      if (cancelled || unlockedFileId !== fileId) return;
+      setLock(NO_LOCK);
+    }
+
+    /* Sent back only to us — someone else already holds the lock and
+       our own FILE_LOCK request was rejected. Surfacing this (rather
+       than silently dropping it) matters because it can legitimately
+       happen even with Monaco's readOnly already respecting a known
+       lock: a narrow window right after opening the file, before this
+       socket has learned about an existing lock via ROOM_JOIN catch-up
+       or before React has applied readOnly, where a keystroke could
+       still slip through. */
+    function onFileLockFailed({ fileId: failedFileId, lockedBy }) {
+      if (cancelled || failedFileId !== fileId) return;
+      setLock({ locked: true, byMe: false, username: lockedBy, userId: null });
+    }
+
     /* Local typing state — plain closure variables scoped to this
        effect run (a fresh one per file/room join), not refs, since
        they never need to survive past this room's own cleanup. */
@@ -381,6 +438,11 @@ export function useYjs({ fileId, user, onDocReady }) {
          real .buffer/.byteOffset, making Y.applyUpdate throw there
          (see liveUpdateManager.js) and silently drop every remote sync. */
       socket.emit(SOCKET_EVENTS.FILE_CHANGE, { roomId: fileId, update });
+
+      if (!lockRequested) {
+        lockRequested = true;
+        socket.emit(SOCKET_EVENTS.FILE_LOCK, { roomId: fileId, fileId, projectId, fileName });
+      }
 
       if (!isTyping) {
         isTyping = true;
@@ -403,6 +465,9 @@ export function useYjs({ fileId, user, onDocReady }) {
     socket.on(SOCKET_EVENTS.USER_TYPING, onUserTyping);
     socket.on(SOCKET_EVENTS.USER_STOPPED_TYPING, onUserStoppedTyping);
     socket.on(SOCKET_EVENTS.CURSOR_UPDATED, onCursorUpdated);
+    socket.on(SOCKET_EVENTS.FILE_LOCKED, onFileLocked);
+    socket.on(SOCKET_EVENTS.FILE_UNLOCKED, onFileUnlocked);
+    socket.on(SOCKET_EVENTS.FILE_LOCK_FAILED, onFileLockFailed);
     socket.emit(SOCKET_EVENTS.ROOM_JOIN, fileId);
 
     /* Throttled cursor-position emitter for this file's room. Position
@@ -432,10 +497,22 @@ export function useYjs({ fileId, user, onDocReady }) {
       socket.off(SOCKET_EVENTS.USER_TYPING, onUserTyping);
       socket.off(SOCKET_EVENTS.USER_STOPPED_TYPING, onUserStoppedTyping);
       socket.off(SOCKET_EVENTS.CURSOR_UPDATED, onCursorUpdated);
+      socket.off(SOCKET_EVENTS.FILE_LOCKED, onFileLocked);
+      socket.off(SOCKET_EVENTS.FILE_UNLOCKED, onFileUnlocked);
+      socket.off(SOCKET_EVENTS.FILE_LOCK_FAILED, onFileLockFailed);
+      /* Release our own lock (if we hold one) on this file — covers
+         switching files and closing/leaving. A plain disconnect skips
+         straight to the socket's own teardown below without ever
+         reaching this cleanup, which is exactly why the backend also
+         self-heals via releaseLocksForSocket on "disconnecting". Safe
+         to emit unconditionally: the backend's unlockFile is a no-op
+         for a socket that never actually held the lock. */
+      socket.emit(SOCKET_EVENTS.FILE_UNLOCK, { roomId: fileId, fileId });
       socket.emit(SOCKET_EVENTS.ROOM_LEAVE, fileId);
       setPeersRoster([]);
       setTypingSocketIds(new Set());
       setCursors({});
+      setLock(NO_LOCK);
 
       throttledSendCursor.cancel();
       if (sendCursorRef.current === throttledSendCursor) sendCursorRef.current = null;
@@ -482,6 +559,7 @@ export function useYjs({ fileId, user, onDocReady }) {
     sendCursor,
     typingSocketIds,
     isLocalTyping,
+    lock,
   };
 }
 

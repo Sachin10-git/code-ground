@@ -1,35 +1,12 @@
 /*
- * AISidebar.module.css — Code Ground AI pair programmer panel
+ * AIChatPanel.module.css — Code Ground AI chat panel
  *
- * Design tokens (same system as all other pages):
- *   Base bg:       #080B14
- *   Surface:       #0D1117
- *   Surface 2:     #161B22
- *   Border:        rgba(255,255,255,0.07)
- *   Border hover:  rgba(255,255,255,0.13)
- *   Accent blue:   #3B82F6
- *   Accent cyan:   #22D3EE
- *   Success green: #34D399
- *   Danger red:    #F87171
- *   Text primary:  #E2E8F0
- *   Text muted:    #64748B
- *   Text hint:     #334155
- *
- * Layout:
- *   .root          — flex column, fills its parent container
- *   .header        — fixed height, logo + title + clear button
- *   .context_note  — fixed height, shows what the AI is watching
- *   .messages      — flex: 1, scrolls internally
- *   .scroll_btn    — absolute, floats above input when user scrolls up
- *   .input_wrap    — fixed height, textarea + send button
- *   .input_hint    — fixed height, keyboard shortcut hint
- *
- * This component is designed to fill whatever height its parent gives it.
- * In Editor.jsx the parent is .right_panel which uses flex: 1.
- * The component works correctly at any height down to ~300px.
+ * Same skeleton as TeamChatPanel.module.css (the two panels are meant
+ * to feel like one product, switched by the tab strip in Editor.jsx),
+ * plus a slim context strip up top for "who the AI is watching" +
+ * clear-chat, and an empty-state with suggested prompts.
  */
 
-/* ── Root container ─────────────────────── */
 .root {
   display: flex;
   flex-direction: column;
@@ -37,11 +14,10 @@
   min-height: 0;
   overflow: hidden;
   background: #0D1117;
-  position: relative;  /* needed for the scroll_btn absolute positioning */
+  position: relative;
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
-/* ── Accessibility utility ─────────────── */
 .sr_only {
   position: absolute;
   width: 1px;
@@ -53,59 +29,47 @@
   border: 0;
 }
 
-/* ── Spinner ────────────────────────────── */
 .spinner {
   animation: spin 0.7s linear infinite;
   transform-origin: center;
   flex-shrink: 0;
 }
 
-/* ── Header ─────────────────────────────── */
-.header {
+/* ── Context strip ───────────────────────── */
+.context_note {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  /* Slightly darker than the message area to create depth */
-  background: rgba(8, 11, 20, 0.4);
+  gap: 6px;
+  padding: 6px 10px 6px 14px;
+  font-size: 0.6875rem;
+  color: #334155;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(34, 211, 238, 0.025);
 }
 
-.header_left {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #64748B;
-}
-
-.title {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #94A3B8;
-  letter-spacing: 0.01em;
-}
-
-/*
- * Pulsing green dot — signals "AI is live and watching".
- * The pulse animation makes it feel active, not static.
- */
-.live_dot {
-  width: 6px;
-  height: 6px;
+.context_dot {
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: #34D399;
+  background: #22D3EE;
   flex-shrink: 0;
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* Clear button — dimmed by default, red on hover */
+.context_text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .clear_btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 6px;
   background: transparent;
   border: none;
@@ -119,36 +83,42 @@
   background: rgba(248, 113, 113, 0.08);
 }
 
-/* ── Context note ────────────────────────── */
-/*
- * A one-line strip below the header that shows what the AI is
- * currently watching. The cyan dot and text together communicate
- * that this is a live, session-aware feature.
- */
-.context_note {
+/* ── AI actions row — Explain/Review/Refactor/Generate (Phase 6.6),
+   moved in from the top navbar. 2x2 grid rather than one row: at the
+   panel's minimum width (260px) four labeled buttons side by side
+   would be too cramped to read. ── */
+.actions_row {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
-  padding: 5px 14px;
-  font-size: 0.6875rem;
-  color: #334155;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(34, 211, 238, 0.025);
-  /* Single line — truncate if very long */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.context_dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #22D3EE;
-  flex-shrink: 0;
-  animation: pulse 2s ease-in-out infinite;
+.action_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94A3B8;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
+.action_btn:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+  color: #E2E8F0;
+}
+.action_btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Message list ────────────────────────── */
 .messages {
@@ -156,9 +126,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px 0 4px;
-  /* Smooth scroll for the scroll-to-bottom button */
   scroll-behavior: smooth;
-  /* Custom scrollbar — thin, matches the dark theme */
   scrollbar-width: thin;
   scrollbar-color: #1E293B transparent;
 }
@@ -179,7 +147,6 @@
   animation: fade_in 0.3s ease;
 }
 
-/* Dimmed <CG/> logo mark — decorative, signals AI */
 .empty_logo {
   font-family: 'JetBrains Mono', monospace;
   font-size: 1rem;
@@ -204,7 +171,6 @@
   max-width: 240px;
 }
 
-/* Suggestion buttons — click to pre-fill the input */
 .suggestions {
   display: flex;
   flex-direction: column;
@@ -235,7 +201,6 @@
   background: rgba(59, 130, 246, 0.05);
 }
 
-/* › arrow prefix on suggestion buttons — mono, brand-coloured */
 .suggestion_arrow {
   font-family: 'JetBrains Mono', monospace;
   color: #3B82F6;
@@ -244,68 +209,10 @@
   line-height: 1;
 }
 
-/* ── Thinking indicator ──────────────────── */
-/*
- * Shown between the user's message and the AI's reply.
- * Three dots bounce in sequence to signal processing.
- */
-.thinking {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 7px 14px;
-  animation: fade_in 0.2s ease;
-}
-
-/* Matches the AI message avatar exactly */
-.thinking_avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #161B22;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.5rem;
-  font-weight: 700;
-  color: #3B82F6;
-  flex-shrink: 0;
-}
-
-/* Three bouncing dots */
-.thinking_dots {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  /* Align with the text baseline in a message */
-  padding-top: 7px;
-}
-
-.thinking_dots span {
-  display: block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #334155;
-  animation: bounce 1.2s ease-in-out infinite;
-}
-
-/* Stagger the bounce delays for a wave effect */
-.thinking_dots span:nth-child(1) { animation-delay: 0s; }
-.thinking_dots span:nth-child(2) { animation-delay: 0.18s; }
-.thinking_dots span:nth-child(3) { animation-delay: 0.36s; }
-
 /* ── Scroll to bottom button ─────────────── */
-/*
- * Floats above the input area. Only mounted when the user
- * has scrolled up (not at the bottom of the message list).
- * Clicking it scrolls the list back to the latest message.
- */
 .scroll_btn {
   position: absolute;
-  bottom: 68px;      /* above the input area + hint */
+  bottom: 68px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -326,7 +233,6 @@
 .scroll_btn:hover {
   background: #1E293B;
   color: #E2E8F0;
-  /* Slight scale — feels satisfying to click */
   transform: translateX(-50%) scale(1.1);
 }
 
@@ -341,11 +247,6 @@
   background: #080B14;
 }
 
-/*
- * Auto-growing textarea.
- * Starts at 1 row (36px). The onInput handler grows it up to 120px.
- * resize: none — we control height via JS, no drag handle needed.
- */
 .input {
   flex: 1;
   background: #161B22;
@@ -369,7 +270,6 @@
 .input::-webkit-scrollbar  { width: 3px; }
 .input::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 2px; }
 
-/* Send button */
 .send_btn {
   flex-shrink: 0;
   width: 34px;
@@ -383,7 +283,6 @@
   justify-content: center;
   cursor: pointer;
   transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
-  /* Align with the bottom of the textarea */
   align-self: flex-end;
 }
 .send_btn:hover:not(:disabled) {
@@ -398,7 +297,6 @@
 .send_btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
 /* ── Input hint ──────────────────────────── */
-/* Keyboard shortcut hint below the input — very dim */
 .input_hint {
   flex-shrink: 0;
   text-align: center;
@@ -410,40 +308,20 @@
   background: #080B14;
 }
 
-/* ── Keyframe animations ─────────────────── */
-
+/* ── Keyframes ────────────────────────────── */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
-
 @keyframes fade_in {
   from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes bounce {
-  0%, 80%, 100% { transform: translateY(0); }
-  40%           { transform: translateY(-5px); }
-}
-
-/* ── Reduced motion ──────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .live_dot,
-  .context_dot,
-  .spinner,
-  .thinking_dots span { animation: none; }
-
-  .msg,
-  .thinking,
-  .empty,
-  .scroll_btn { animation: none; }
-
-  .input,
-  .send_btn,
-  .suggestion_btn { transition: none; }
+  .spinner, .context_dot, .empty, .scroll_btn { animation: none; }
+  .input, .send_btn, .suggestion_btn { transition: none; }
 }

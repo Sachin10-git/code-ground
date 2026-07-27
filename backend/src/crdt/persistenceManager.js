@@ -22,7 +22,11 @@ const saveDocument = async (roomId, doc) => {
 };
 
 /**
- * Load a Y.Doc from MongoDB
+ * Load a Y.Doc from MongoDB. Returns whether a saved document was
+ * found and applied — callers use this to decide whether an older
+ * fallback (e.g. a periodic CRDTSnapshot) is even worth trying, since
+ * this debounced, save-on-every-pause record is always at least as
+ * fresh as any periodic snapshot.
  */
 const loadDocument = async (roomId, doc) => {
 
@@ -30,12 +34,14 @@ const loadDocument = async (roomId, doc) => {
         roomId,
     });
 
-    if (!savedDoc) return;
+    if (!savedDoc) return false;
 
     Y.applyUpdate(
         doc,
         new Uint8Array(savedDoc.state)
     );
+
+    return true;
 
 };
 
