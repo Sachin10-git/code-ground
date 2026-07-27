@@ -445,6 +445,7 @@ function FolderRow({ folderId, depth, tree, collapsedIds, selectedFileId, select
 export default function FileExplorer({
   projectId, selectedFileId, onSelectFile,
   onRemoteFileRenamed, onRemoteFileMoved, onRemoteFileDeleted,
+  onRemoteWorkspaceRestored,
   filePresence,
 }) {
   const [loading, setLoading]           = useState(true);
@@ -785,6 +786,7 @@ export default function FileExplorer({
     onFolderRenamed: useCallback((payload) => setTree(prev => renameFolderInTree(prev, payload._id, payload.name)), []),
     onFolderDeleted,
     onFolderMoved:   useCallback((payload) => setTree(prev => moveFolderInTree(prev, payload)), []),
+    onSnapshotRestored: onRemoteWorkspaceRestored,
   });
 
   useEffect(() => {

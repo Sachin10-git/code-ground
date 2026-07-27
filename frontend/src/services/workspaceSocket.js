@@ -55,6 +55,14 @@ export const WORKSPACE_EVENTS = {
   FILE_LOCKED:   'workspace:file-locked',
   FILE_UNLOCKED: 'workspace:file-unlocked',
 
+  /* Phase 6.7 — Snapshots (see backend/src/socket/socketConstants.js).
+     RESTORED triggers a full tree resync on every connected client —
+     a restore can touch every file/folder in the project at once. */
+  SNAPSHOT_CREATED:  'workspace:snapshot-created',
+  SNAPSHOT_RENAMED:  'workspace:snapshot-renamed',
+  SNAPSHOT_DELETED:  'workspace:snapshot-deleted',
+  SNAPSHOT_RESTORED: 'workspace:snapshot-restored',
+
   /* Phase 6.0 — Team Chat (see backend/src/socket/socketConstants.js
      for why this reuses the WORKSPACE_JOIN room instead of a separate
      "join chat" step). */

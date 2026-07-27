@@ -11,8 +11,12 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
+  box-sizing: border-box;
   background: #0D1117;
   position: relative;
   font-family: 'Inter', -apple-system, sans-serif;
@@ -83,10 +87,10 @@
   background: rgba(248, 113, 113, 0.08);
 }
 
-/* ── AI actions row — Explain/Review/Refactor/Generate (Phase 6.6),
-   moved in from the top navbar. 2x2 grid rather than one row: at the
-   panel's minimum width (260px) four labeled buttons side by side
-   would be too cramped to read. ── */
+/* ── AI actions row — Explain/Review/Refactor (Phase 6.6), moved in
+   from the top navbar. Grid rather than one row: at the panel's
+   minimum width (260px) labeled buttons side by side would be too
+   cramped to read. ── */
 .actions_row {
   flex-shrink: 0;
   display: grid;
@@ -123,6 +127,10 @@
 /* ── Message list ────────────────────────── */
 .messages {
   flex: 1;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px 0 4px;

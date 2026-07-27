@@ -52,9 +52,11 @@ const ChevronDownIcon = () => (
   </svg>
 );
 
-/* Phase 6.6 — the four AI action icons, moved here from Navbar.jsx now
+/* Phase 6.6 — the AI action icons, moved here from Navbar.jsx now
    that the actions themselves live in this panel instead of the top
-   toolbar. */
+   toolbar. Generate was removed in Phase 6.7 — it duplicated plain AI
+   Chat (users can already ask the AI to generate code by typing), so
+   only Explain/Review/Refactor remain as quick editor actions. */
 const ExplainIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -86,15 +88,6 @@ const RefactorIcon = () => (
   </svg>
 );
 
-const GenerateIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-    strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 2l1.8 5.6L19 9l-5.2 1.4L12 16l-1.8-5.6L5 9l5.2-1.4L12 2z" />
-    <path d="M19 15l.9 2.7L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.3z" />
-  </svg>
-);
-
 const Spinner = () => (
   <svg className={styles.spinner} width="14" height="14"
     viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -116,7 +109,6 @@ const ACTIONS = [
   { key: 'explain',  label: 'Explain',  Icon: ExplainIcon  },
   { key: 'review',   label: 'Review',   Icon: ReviewIcon   },
   { key: 'refactor', label: 'Refactor', Icon: RefactorIcon },
-  { key: 'generate', label: 'Generate', Icon: GenerateIcon },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -175,7 +167,6 @@ export default function AIChatPanel({
   onExplain,
   onReview,
   onRefactor,
-  onGenerate,
   actionsDisabled = false,
 }) {
   const [input, setInput]       = useState('');
@@ -233,7 +224,7 @@ export default function AIChatPanel({
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  const ACTION_HANDLERS = { explain: onExplain, review: onReview, refactor: onRefactor, generate: onGenerate };
+  const ACTION_HANDLERS = { explain: onExplain, review: onReview, refactor: onRefactor };
 
   return (
     <aside className={styles.root} aria-label="AI pair programmer">

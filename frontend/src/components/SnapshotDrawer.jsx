@@ -1,31 +1,41 @@
 /**
- * SnapshotDrawer.jsx — Code Ground version control drawer
+ * SnapshotDrawer.jsx — Code Ground project Snapshots panel (Phase 6.7)
  *
- * A slide-out panel for saving and restoring named versions of a
- * document. This is Code Ground's lightweight alternative to git
- * commits — built for quick checkpoints during a pairing session
- * rather than full source control.
+ * A slide-out panel for saving and restoring named checkpoints of the
+ * WHOLE project — every file, every folder, at a point in time (not
+ * just the currently open file/document, which is what this component
+ * did before Phase 6.7 — see snapshotService.js on the backend for
+ * what actually gets captured).
  *
  * ── What this component does ────────────────────────────────────────
  *
  *   1. Slides in from the right edge, overlaying part of the editor.
- *   2. Lets the user save the CURRENT editor content as a named
- *      snapshot (e.g. "working version before refactor").
- *   3. Lists all saved snapshots for this document, newest first,
- *      each showing: label, who saved it, relative timestamp,
- *      and a Restore button.
- *   4. Restoring requires an inline confirmation step — restoring
- *      overwrites the LIVE document for every connected user, so
- *      this is a deliberately "two-click" action, never one-click.
- *   5. Closes on: clicking the backdrop, pressing Escape, or the
+ *   2. Lets the user save the CURRENT project state as a named
+ *      snapshot (name is optional — a blank one falls back to a
+ *      generated label for display).
+ *   3. Lists all saved snapshots for this project, newest first, each
+ *      showing: name, creator, relative + absolute timestamp, total
+ *      files captured, and how many of those files differ from the
+ *      project's current content.
+ *   4. Restoring and deleting both require an inline confirmation step
+ *      — restoring overwrites the LIVE project for every connected
+ *      collaborator, so this is deliberately "two-click", never
+ *      one-click. Renaming is a lighter-weight inline edit with no
+ *      confirmation step, matching FileExplorer's rename UX.
+ *   5. Surfaces a dismissible error banner for a failed action (the
+ *      "success/error feedback" requirement) — no new toast/
+ *      notification system, just the same inline-banner convention
+ *      Editor.jsx already uses for save/workspace errors.
+ *   6. Closes on: clicking the backdrop, pressing Escape, or the
  *      explicit close button.
  *
  * ── What this component does NOT own ────────────────────────────────
  *
- *   - The API calls (GET/POST snapshots, restore logic) — the parent
+ *   - The API calls (GET/POST/PATCH/DELETE snapshots) — the parent
  *     (Editor.jsx) owns these and passes data + handlers as props.
- *   - The actual Yjs document — restoring is delegated to onRestore,
- *     which Editor.jsx implements by replacing the Yjs text content.
+ *   - Collaboration/Yjs sync on restore — entirely a backend concern
+ *     (snapshotService.js) plus the existing useYjs.js FILE_UPDATED
+ *     handler; this component just fires the restore request.
  *
  * ── Props ────────────────────────────────────────────────────────────
  *
@@ -34,45 +44,30 @@
  *
  *   snapshots     {Array}     — list of saved snapshots:
  *                               {
- *                                 id:          string,
- *                                 label:       string,
- *                                 created_by_name: string,
- *                                 created_at:  ISO string,
- *                                 language:    string (optional),
- *                                 content:     string,
+ *                                 id:                string,
+ *                                 name:               string,
+ *                                 createdByUsername:  string,
+ *                                 createdAt:          ISO string,
+ *                                 fileCount:          number,
+ *                                 changedFiles:       number,
  *                               }
  *
  *   loadingList   {boolean}   — true while snapshots are being fetched
  *
- *   onSave        {Function}  — called with (label: string) when the
- *                               user saves a new snapshot. Parent
- *                               handles the POST and updates the list.
- *   saving        {boolean}   — true while a save request is in flight
+ *   onSave        {Function}  — called with (name: string) — may be ''
+ *   saving        {boolean}
  *
- *   onRestore     {Function}  — called with (snapshot: Object) after
- *                               the user confirms a restore.
- *   restoringId   {string|null} — id of the snapshot currently being
- *                               restored (shows a spinner on that row)
+ *   onRestore     {Function}  — called with (snapshot: Object) after confirm
+ *   restoringId   {string|null}
  *
- *   onDelete      {Function?} — called with (id: string) to delete a
- *                               snapshot. Optional — if omitted, no
- *                               delete button is shown.
+ *   onRename      {Function}  — called with (id: string, name: string)
+ *   renamingId    {string|null} — id currently being renamed (in flight)
  *
- * ── Usage in Editor.jsx ─────────────────────────────────────────────
+ *   onDelete      {Function}  — called with (id: string) after confirm
+ *   deletingId    {string|null}
  *
- *   import SnapshotDrawer from '../components/SnapshotDrawer.jsx';
- *
- *   <SnapshotDrawer
- *     open={showSnapshots}
- *     onClose={() => setShowSnapshots(false)}
- *     snapshots={snapshots}
- *     loadingList={snapshotsLoading}
- *     onSave={handleSaveSnapshot}
- *     saving={savingSnapshot}
- *     onRestore={handleRestoreSnapshot}
- *     restoringId={restoringSnapshotId}
- *     onDelete={handleDeleteSnapshot}
- *   />
+ *   error         {string}    — last action's error message, if any
+ *   onDismissError {Function?}
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -80,8 +75,6 @@ import styles from './SnapshotDrawer.module.css';
 
 /* ─────────────────────────────────────────────────────────────────────
    RELATIVE TIME — "just now" / "5 min ago" / "2 hr ago" / "Jan 14"
-   Same hand-rolled implementation used across AIMessage.jsx and
-   Dashboard.jsx — kept consistent rather than adding a date-fns dep.
 ───────────────────────────────────────────────────────────────────── */
 function relativeTime(isoStr) {
   if (!isoStr) return '';
@@ -92,6 +85,18 @@ function relativeTime(isoStr) {
   if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} days ago`;
   return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function absoluteTime(isoStr) {
+  if (!isoStr) return '';
+  return new Date(isoStr).toLocaleString('en-US', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
+}
+
+function displayName(snapshot) {
+  return snapshot.name?.trim() || `Snapshot – ${absoluteTime(snapshot.createdAt)}`;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -136,11 +141,28 @@ const TrashIcon = () => (
   </svg>
 );
 
+const PencilIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+  </svg>
+);
+
 const ClockIcon = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
     <circle cx="12" cy="12" r="10" />
     <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
+const WarningIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
 );
 
@@ -154,21 +176,45 @@ const Spinner = ({ size = 13 }) => (
 );
 
 /* ─────────────────────────────────────────────────────────────────────
-   SAVE FORM — label input + save button at the top of the drawer.
-   Extracted as its own component so its local input state doesn't
-   cause the (potentially long) snapshot list to re-render on every
-   keystroke.
+   ERROR BANNER — dismissible, top of drawer. Same inline-banner
+   convention Editor.jsx already uses for saveError/workspaceNotice —
+   not a new toast/notification system.
+───────────────────────────────────────────────────────────────────── */
+function ErrorBanner({ message, onDismiss }) {
+  if (!message) return null;
+  return (
+    <div className={styles.error_banner} role="alert">
+      <WarningIcon />
+      <span>{message}</span>
+      {onDismiss && (
+        <button
+          type="button"
+          className={styles.error_dismiss_btn}
+          onClick={onDismiss}
+          aria-label="Dismiss error"
+        >
+          <CloseIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   SAVE FORM — optional-name input + save button at the top of the
+   drawer. Extracted as its own component so its local input state
+   doesn't cause the (potentially long) snapshot list to re-render on
+   every keystroke.
 ───────────────────────────────────────────────────────────────────── */
 function SaveForm({ onSave, saving }) {
-  const [label, setLabel] = useState('');
+  const [name, setName] = useState('');
   const inputRef = useRef(null);
 
   function handleSubmit(e) {
     e.preventDefault();
-    const trimmed = label.trim();
-    if (!trimmed || saving) return;
-    onSave(trimmed);
-    setLabel('');
+    if (saving) return;
+    onSave(name.trim());
+    setName('');
   }
 
   return (
@@ -177,21 +223,21 @@ function SaveForm({ onSave, saving }) {
         ref={inputRef}
         className={styles.save_input}
         type="text"
-        value={label}
-        onChange={e => setLabel(e.target.value)}
-        placeholder="e.g. working version before refactor"
-        maxLength={80}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Snapshot name (optional) — e.g. Before Refactor"
+        maxLength={100}
         disabled={saving}
-        aria-label="Snapshot label"
+        aria-label="Snapshot name"
       />
       <button
         type="submit"
         className={styles.save_btn}
-        disabled={saving || !label.trim()}
+        disabled={saving}
         aria-busy={saving}
       >
         {saving ? <Spinner size={13} /> : <CameraIcon />}
-        Save
+        {saving ? 'Saving…' : 'Save'}
       </button>
     </form>
   );
@@ -199,113 +245,148 @@ function SaveForm({ onSave, saving }) {
 
 /* ─────────────────────────────────────────────────────────────────────
    SNAPSHOT ROW — one item in the list.
-   Handles its own inline restore-confirmation state, the same
-   pattern used for delete confirmation on Dashboard's DocCard.
 ───────────────────────────────────────────────────────────────────── */
-function SnapshotRow({ snapshot, isRestoring, onRestore, onDelete }) {
-  /* 'idle' | 'confirm-restore' | 'confirm-delete' */
+function SnapshotRow({ snapshot, isRestoring, isDeleting, isRenaming, onRestore, onRename, onDelete }) {
+  /* 'idle' | 'renaming' | 'confirm-restore' | 'confirm-delete' */
   const [mode, setMode] = useState('idle');
+  const [nameDraft, setNameDraft] = useState('');
+  const renameInputRef = useRef(null);
 
-  function handleRestoreClick() {
-    setMode('confirm-restore');
+  useEffect(() => {
+    if (mode === 'renaming') {
+      setNameDraft(snapshot.name || '');
+      setTimeout(() => renameInputRef.current?.focus(), 0);
+    }
+  }, [mode, snapshot.name]);
+
+  /* isRenaming goes true -> false once the request settles (success OR
+     failure — a failure's error is surfaced by the drawer-level banner,
+     and the user can just click Rename again). Either way the inline
+     form has done its job, so return to the idle row rather than
+     leaving a submitted form sitting open with nothing left to do. */
+  const wasRenamingRef = useRef(false);
+  useEffect(() => {
+    if (wasRenamingRef.current && !isRenaming) setMode('idle');
+    wasRenamingRef.current = isRenaming;
+  }, [isRenaming]);
+
+  function handleRenameSubmit(e) {
+    e.preventDefault();
+    const trimmed = nameDraft.trim();
+    onRename(snapshot.id, trimmed);
   }
-  function handleDeleteClick() {
-    setMode('confirm-delete');
-  }
-  function handleCancel() {
-    setMode('idle');
-  }
-  function handleConfirmRestore() {
-    onRestore(snapshot);
-    /* Don't reset mode — row stays in confirm state until the
-       restoringId prop clears, showing the spinner throughout. */
-  }
-  function handleConfirmDelete() {
-    onDelete(snapshot.id);
-  }
+
+  const busy = isRestoring || isDeleting || isRenaming;
 
   return (
     <li className={styles.row}>
 
-      {/* ── Default view: label + meta + action buttons ── */}
       {mode === 'idle' && (
         <>
           <div className={styles.row_main}>
-            <p className={styles.row_label}>{snapshot.label}</p>
+            <p className={styles.row_label} title={displayName(snapshot)}>
+              {displayName(snapshot)}
+            </p>
             <div className={styles.row_meta}>
-              <span className={styles.meta_item}>
-                {snapshot.created_by_name || 'Unknown'}
-              </span>
+              <span className={styles.meta_item}>{snapshot.createdByUsername || 'Unknown'}</span>
               <span className={styles.meta_dot} aria-hidden="true">·</span>
-              <span className={styles.meta_item}>
+              <span className={styles.meta_item} title={absoluteTime(snapshot.createdAt)}>
                 <ClockIcon />
-                {relativeTime(snapshot.created_at)}
+                {relativeTime(snapshot.createdAt)}
               </span>
+            </div>
+            <div className={styles.meta_pills}>
+              <span className={styles.meta_pill}>
+                {snapshot.fileCount ?? 0} {snapshot.fileCount === 1 ? 'file' : 'files'}
+              </span>
+              {typeof snapshot.changedFiles === 'number' && snapshot.changedFiles > 0 && (
+                <span className={`${styles.meta_pill} ${styles.meta_pill_changed}`}>
+                  {snapshot.changedFiles} changed
+                </span>
+              )}
             </div>
           </div>
 
           <div className={styles.row_actions}>
             <button
               className={styles.restore_btn}
-              onClick={handleRestoreClick}
-              disabled={isRestoring}
-              aria-label={`Restore snapshot: ${snapshot.label}`}
+              onClick={() => setMode('confirm-restore')}
+              disabled={busy}
+              aria-label={`Restore snapshot: ${displayName(snapshot)}`}
             >
               {isRestoring ? <Spinner size={12} /> : <RestoreIcon />}
               Restore
             </button>
-
-            {onDelete && (
-              <button
-                className={styles.delete_icon_btn}
-                onClick={handleDeleteClick}
-                disabled={isRestoring}
-                aria-label={`Delete snapshot: ${snapshot.label}`}
-                title="Delete"
-              >
-                <TrashIcon />
-              </button>
-            )}
+            <button
+              className={styles.delete_icon_btn}
+              onClick={() => setMode('renaming')}
+              disabled={busy}
+              aria-label={`Rename snapshot: ${displayName(snapshot)}`}
+              title="Rename"
+            >
+              {isRenaming ? <Spinner size={12} /> : <PencilIcon />}
+            </button>
+            <button
+              className={styles.delete_icon_btn}
+              onClick={() => setMode('confirm-delete')}
+              disabled={busy}
+              aria-label={`Delete snapshot: ${displayName(snapshot)}`}
+              title="Delete"
+            >
+              {isDeleting ? <Spinner size={12} /> : <TrashIcon />}
+            </button>
           </div>
         </>
       )}
 
-      {/* ── Restore confirmation ── */}
+      {mode === 'renaming' && (
+        <form className={styles.rename_form} onSubmit={handleRenameSubmit}>
+          <input
+            ref={renameInputRef}
+            className={styles.save_input}
+            type="text"
+            value={nameDraft}
+            onChange={e => setNameDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') setMode('idle'); }}
+            maxLength={100}
+            disabled={isRenaming}
+            aria-label="Snapshot name"
+          />
+          <button type="submit" className={styles.confirm_yes} disabled={isRenaming}>
+            {isRenaming ? <Spinner size={12} /> : 'Save'}
+          </button>
+          <button type="button" className={styles.confirm_no} onClick={() => setMode('idle')} disabled={isRenaming}>
+            Cancel
+          </button>
+        </form>
+      )}
+
       {mode === 'confirm-restore' && (
         <div className={styles.confirm_bar}>
           <span className={styles.confirm_text}>
-            Overwrite the live document for everyone?
+            Overwrite the live project for everyone?
           </span>
           <div className={styles.confirm_actions}>
-            <button
-              className={styles.confirm_yes}
-              onClick={handleConfirmRestore}
-              disabled={isRestoring}
-            >
+            <button className={styles.confirm_yes} onClick={() => onRestore(snapshot)} disabled={isRestoring}>
               {isRestoring ? <Spinner size={12} /> : 'Restore'}
             </button>
-            <button
-              className={styles.confirm_no}
-              onClick={handleCancel}
-              disabled={isRestoring}
-            >
+            <button className={styles.confirm_no} onClick={() => setMode('idle')} disabled={isRestoring}>
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Delete confirmation ── */}
       {mode === 'confirm-delete' && (
         <div className={styles.confirm_bar}>
           <span className={styles.confirm_text}>
-            Delete "{snapshot.label}" permanently?
+            Delete "{displayName(snapshot)}" permanently?
           </span>
           <div className={styles.confirm_actions}>
-            <button className={styles.confirm_yes_danger} onClick={handleConfirmDelete}>
-              Delete
+            <button className={styles.confirm_yes_danger} onClick={() => onDelete(snapshot.id)} disabled={isDeleting}>
+              {isDeleting ? <Spinner size={12} /> : 'Delete'}
             </button>
-            <button className={styles.confirm_no} onClick={handleCancel}>
+            <button className={styles.confirm_no} onClick={() => setMode('idle')} disabled={isDeleting}>
               Cancel
             </button>
           </div>
@@ -317,7 +398,7 @@ function SnapshotRow({ snapshot, isRestoring, onRestore, onDelete }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   EMPTY STATE — shown when there are no snapshots yet.
+   EMPTY STATE
 ───────────────────────────────────────────────────────────────────── */
 function EmptyState() {
   return (
@@ -327,8 +408,9 @@ function EmptyState() {
       </div>
       <p className={styles.empty_heading}>No snapshots yet</p>
       <p className={styles.empty_sub}>
-        Save a named version above to create your first checkpoint.
-        You can restore it any time, even after big changes.
+        Save a checkpoint of the whole project above. You can restore
+        it any time, even after big changes — every file and folder is
+        captured.
       </p>
     </div>
   );
@@ -358,7 +440,12 @@ export default function SnapshotDrawer({
   saving       = false,
   onRestore,
   restoringId  = null,
+  onRename,
+  renamingId   = null,
   onDelete,
+  deletingId   = null,
+  error        = '',
+  onDismissError,
 }) {
   const drawerRef = useRef(null);
 
@@ -413,6 +500,8 @@ export default function SnapshotDrawer({
           </button>
         </div>
 
+        <ErrorBanner message={error} onDismiss={onDismissError} />
+
         {/* Save form — always visible at the top */}
         <SaveForm onSave={onSave} saving={saving} />
 
@@ -421,7 +510,7 @@ export default function SnapshotDrawer({
           <span className={styles.list_count}>
             {loadingList
               ? 'Loading…'
-              : `${snapshots.length} saved ${snapshots.length === 1 ? 'version' : 'versions'}`}
+              : `${snapshots.length} saved ${snapshots.length === 1 ? 'snapshot' : 'snapshots'}`}
           </span>
         </div>
 
@@ -442,7 +531,10 @@ export default function SnapshotDrawer({
                   key={snap.id}
                   snapshot={snap}
                   isRestoring={restoringId === snap.id}
+                  isDeleting={deletingId === snap.id}
+                  isRenaming={renamingId === snap.id}
                   onRestore={onRestore}
+                  onRename={onRename}
                   onDelete={onDelete}
                 />
               ))}

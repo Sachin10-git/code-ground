@@ -29,7 +29,6 @@ const ACTION_BADGE_LABEL = {
   explain:  'Explain',
   review:   'Review',
   refactor: 'Refactor',
-  generate: 'Generate',
 };
 
 /* ─────────────────────────────────────────────────────────────────────

@@ -168,6 +168,27 @@ const isProjectOwner = async (projectId, userId) => {
     return !!project;
 };
 
+/**
+ * Check whether a user can make destructive/structural changes to a
+ * workspace (owner or editor role) — plain isProjectMember() also
+ * passes viewers, which is fine for reads but not for something like
+ * a Snapshot restore that overwrites every file in the project.
+ */
+const isProjectEditor = async (projectId, userId) => {
+
+    const project = await Project.findOne({
+        _id: projectId,
+        members: {
+            $elemMatch: {
+                userId,
+                role: { $in: ["owner", "editor"] }
+            }
+        }
+    });
+
+    return !!project;
+};
+
 module.exports = {
     createProject,
     getProjects,
@@ -177,5 +198,6 @@ module.exports = {
     leaveWorkspace,
     getProjectMembers,
     isProjectMember,
-    isProjectOwner
+    isProjectOwner,
+    isProjectEditor
 };

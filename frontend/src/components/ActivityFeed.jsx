@@ -59,6 +59,14 @@ const UnlockIcon = () => (
     <path d="M7 11V7a5 5 0 0 1 9.9-2" />
   </svg>
 );
+/* Phase 6.7 — snapshot restore */
+const RestoreIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="1 4 1 10 7 10" />
+    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+  </svg>
+);
 
 const OPERATION_META = {
   created:  { label: 'created',  color: '#34D399', Icon: PlusIcon },
@@ -67,6 +75,7 @@ const OPERATION_META = {
   deleted:  { label: 'deleted',  color: '#F87171', Icon: TrashIcon },
   locked:   { label: 'locked',   color: '#FBBF24', Icon: LockIcon },
   unlocked: { label: 'unlocked', color: '#64748B', Icon: UnlockIcon },
+  restored: { label: 'restored', color: '#22D3EE', Icon: RestoreIcon },
 };
 
 function formatTime(timestamp) {

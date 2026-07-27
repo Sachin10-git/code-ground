@@ -88,6 +88,85 @@ function CodeBlock({ lang, content }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   MATH ARTIFACT SANITIZER — Phase 6.7.
+   MarkdownLite has no LaTeX renderer, so an LLM's math delimiters
+   (dollar-wrapped expressions, backslash-paren/bracket wrappers,
+   \mathcal{}-style macros, ...) would otherwise leak through as raw,
+   confusing punctuation. Rather than render math, this strips/unwraps
+   the common delimiters and macros an LLM tends to emit, falling back
+   to their plain inner text — per spec, "display expressions as
+   readable plain text instead of raw delimiters."
+
+   Applied only to non-fenced-code text segments (see MarkdownLite's
+   main loop below) and with inline `code` spans swapped for
+   placeholders first, so a literal `$` or LaTeX-looking text a
+   user/AI put inside real inline code is never touched.
+───────────────────────────────────────────────────────────────────── */
+const INLINE_CODE_SPAN_RE = /`[^`\n]+`/g;
+
+const LATEX_MACRO_REPLACEMENTS = [
+  [/\\mathcal\{([^}]*)\}/g,        '$1'],
+  [/\\mathrm\{([^}]*)\}/g,         '$1'],
+  [/\\mathbf\{([^}]*)\}/g,         '$1'],
+  [/\\text\{([^}]*)\}/g,           '$1'],
+  [/\\operatorname\{([^}]*)\}/g,   '$1'],
+  [/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2'],
+  [/\\sqrt\{([^}]*)\}/g,           '√$1'],
+  [/\\times/g,                     '×'],
+  [/\\cdot/g,                      '·'],
+  [/\\leq?/g,                      '≤'],
+  [/\\geq?/g,                      '≥'],
+  [/\\neq/g,                       '≠'],
+  [/\\infty/g,                     '∞'],
+  [/\\pm/g,                        '±'],
+  /* Flatten leftover subscript/superscript brace groups:
+     n^{2} -> n^2, a_{max} -> a_max */
+  [/([_^])\{([^}]*)\}/g,           '$1$2'],
+];
+
+/* Private-Use-Area character — guaranteed never to appear in real chat
+   text — used to wrap a protected inline-code-span's index while the
+   sanitizer runs. Built via fromCharCode rather than a \u escape
+   literal in source so there's no ambiguity about what byte ends up
+   in this file. A plain " 0 " placeholder would risk colliding with
+   (and then overwriting) a genuine digit in the surrounding prose,
+   e.g. "takes 0 steps" — this sentinel can't. */
+const CODE_SPAN_SENTINEL = String.fromCharCode(0xE001);
+
+function sanitizeMathArtifacts(text) {
+  if (!text.includes('$') && !text.includes('\\')) return text;
+
+  const codeSpans = [];
+  let working = text.replace(INLINE_CODE_SPAN_RE, (m) => {
+    codeSpans.push(m);
+    return CODE_SPAN_SENTINEL + (codeSpans.length - 1) + CODE_SPAN_SENTINEL;
+  });
+
+  /* Unwrap LaTeX delimiters to their inner text — no renderer exists,
+     so the delimiters themselves are just noise. */
+  working = working
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => inner)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => inner)
+    .replace(/\$\$([^$]+)\$\$/g,    (_, inner) => inner)
+    .replace(/\$([^$\n]+)\$/g,      (_, inner) => inner);
+
+  for (const [pattern, replacement] of LATEX_MACRO_REPLACEMENTS) {
+    working = working.replace(pattern, replacement);
+  }
+
+  /* Anything left over is stray delimiter noise (an unmatched `$`, or
+     a LaTeX command with no mapping above) — drop the backslash/dollar
+     but keep whatever text follows, so it reads as plain words rather
+     than a raw escape sequence. */
+  working = working
+    .replace(/\\([a-zA-Z]+)/g, '$1')
+    .replace(/\$/g, '');
+
+  const restoreRe = new RegExp(`${CODE_SPAN_SENTINEL}(\\d+)${CODE_SPAN_SENTINEL}`, 'g');
+  return working.replace(restoreRe, (_, i) => codeSpans[Number(i)]);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    BLOCK SPLIT — fenced code vs. everything else.
 ───────────────────────────────────────────────────────────────────── */
 function splitCodeBlocks(text) {
@@ -327,7 +406,7 @@ export default function MarkdownLite({ text }) {
       nodes.push(<CodeBlock key={key++} lang={segment.lang} content={segment.content} />);
       continue;
     }
-    for (const block of parseTextBlocks(segment.content)) {
+    for (const block of parseTextBlocks(sanitizeMathArtifacts(segment.content))) {
       nodes.push(renderBlock(block, key++));
     }
   }

@@ -28,14 +28,17 @@ const WorkspaceActivitySchema = new mongoose.Schema(
         type: String,
         // Phase 6.6 — "locked"/"unlocked" added for file-locking activity
         // entries (see socket/workspaceBroadcast.js's broadcastFileLocked/
-        // broadcastFileUnlocked).
-        enum: ["created", "renamed", "moved", "deleted", "locked", "unlocked"],
+        // broadcastFileUnlocked). Phase 6.7 — "restored" added for
+        // Snapshot restores (create/rename/delete reuse the existing
+        // "created"/"renamed"/"deleted" values with targetType "snapshot").
+        enum: ["created", "renamed", "moved", "deleted", "locked", "unlocked", "restored"],
         required: true
     },
 
     targetType: {
         type: String,
-        enum: ["file", "folder"],
+        // Phase 6.7 — "snapshot" added alongside file/folder.
+        enum: ["file", "folder", "snapshot"],
         required: true
     },
 

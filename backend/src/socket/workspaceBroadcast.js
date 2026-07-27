@@ -174,6 +174,83 @@ const broadcastFileUnlocked = async (projectId, fileId, fileName, username) => {
   });
 };
 
+/**
+ * Phase 6.7 — Snapshots. Same emit + persistActivity shape as every
+ * mutation above; called from snapshotController.js after the DB
+ * mutation succeeds. `snapshot` only ever needs `_id`/`name` here —
+ * never the full file/folder payload, same "minimum a client needs"
+ * rule the rest of this module follows.
+ */
+const displaySnapshotName = (snapshot) => snapshot.name || "Untitled snapshot";
+
+const broadcastSnapshotCreated = async (projectId, snapshot, username) => {
+  const name = displaySnapshotName(snapshot);
+  emit(projectId, SOCKET_EVENTS.WORKSPACE_SNAPSHOT_CREATED, {
+    _id: snapshot._id,
+    name,
+    username,
+  });
+  await persistActivity({
+    projectId, username, operation: "created", targetType: "snapshot", targetName: name,
+  });
+};
+
+const broadcastSnapshotRenamed = async (projectId, snapshot, username, oldName) => {
+  const name = displaySnapshotName(snapshot);
+  emit(projectId, SOCKET_EVENTS.WORKSPACE_SNAPSHOT_RENAMED, {
+    _id: snapshot._id,
+    name,
+    oldName,
+    newName: name,
+    username,
+  });
+  await persistActivity({
+    projectId, username, operation: "renamed", targetType: "snapshot", targetName: name,
+    oldName, newName: name,
+  });
+};
+
+const broadcastSnapshotDeleted = async (projectId, snapshot, username) => {
+  const name = displaySnapshotName(snapshot);
+  emit(projectId, SOCKET_EVENTS.WORKSPACE_SNAPSHOT_DELETED, {
+    _id: snapshot._id,
+    name,
+    username,
+  });
+  await persistActivity({
+    projectId, username, operation: "deleted", targetType: "snapshot", targetName: name,
+  });
+};
+
+/**
+ * Restoring a snapshot can touch every file/folder in the project at
+ * once. Rather than emit a create/delete broadcast (each carrying its
+ * own activity-feed entry) per affected file/folder — which would
+ * flood the feed with noise for a single user action and evict older,
+ * more meaningful history — this one event does two things instead:
+ *   1. Carries `fileIds` (every file the restored snapshot contains),
+ *      so a client with a file open that ISN'T in that list knows its
+ *      file no longer exists post-restore (see Editor.jsx's
+ *      onRemoteWorkspaceRestored) without a separate per-file signal.
+ *   2. Doubles as "throw away what you have and resync" for the
+ *      Explorer tree (see useWorkspaceSync.js's onResync — the same
+ *      belt-and-suspenders pattern already used after a reconnect).
+ * `fileIds` is emitted live only, never persisted to WorkspaceActivity
+ * — the feed logs one clean "X restored snapshot Y" entry.
+ */
+const broadcastSnapshotRestored = async (projectId, snapshot, username, fileIds = []) => {
+  const name = displaySnapshotName(snapshot);
+  emit(projectId, SOCKET_EVENTS.WORKSPACE_SNAPSHOT_RESTORED, {
+    _id: snapshot._id,
+    name,
+    username,
+    fileIds,
+  });
+  await persistActivity({
+    projectId, username, operation: "restored", targetType: "snapshot", targetName: name,
+  });
+};
+
 module.exports = {
   broadcastFileCreated,
   broadcastFileRenamed,
@@ -185,4 +262,8 @@ module.exports = {
   broadcastFolderMoved,
   broadcastFileLocked,
   broadcastFileUnlocked,
+  broadcastSnapshotCreated,
+  broadcastSnapshotRenamed,
+  broadcastSnapshotDeleted,
+  broadcastSnapshotRestored,
 };

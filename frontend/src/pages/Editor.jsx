@@ -66,7 +66,6 @@ import TeamChatPanel from '../components/TeamChatPanel.jsx';
 import Presence  from '../components/Presence.jsx';
 import OutputPanel from '../components/OutputPanel.jsx';
 import SnapshotDrawer from '../components/SnapshotDrawer.jsx';
-import GeneratePromptModal from '../components/GeneratePromptModal.jsx';
 import Navbar from '../components/Navbar.jsx';
 import FileExplorer from '../components/FileExplorer.jsx';
 import FilePresenceBar from '../components/FilePresenceBar.jsx';
@@ -424,7 +423,7 @@ export default function Editor() {
     setSelectedFile(prev => (prev && prev._id === fileId ? { ...prev, folderId } : prev));
   }, []);
 
-  const handleRemoteFileDeleted = useCallback((fileId) => {
+  const handleRemoteFileDeleted = useCallback((fileId, notice = 'This file was deleted by another collaborator.') => {
     if (fileId !== selectedFileRef.current?._id) return;
 
     collabBindingRef.current?.destroy();
@@ -448,8 +447,50 @@ export default function Editor() {
 
     setSelectedFile(null);
     setSaveError('');
-    setWorkspaceNotice('This file was deleted by another collaborator.');
+    setWorkspaceNotice(notice);
   }, []);
+
+  /* Phase 6.7 — a collaborator (or the current user) restored a
+     Snapshot, which can replace every file/folder in the project at
+     once. `payload.fileIds` is the full set of files the restored
+     snapshot contains (see backend broadcastSnapshotRestored):
+       - if the currently open file ISN'T in it, it no longer exists
+         post-restore — reuse handleRemoteFileDeleted's cleanup
+         (same "file is gone" teardown), just with an accurate notice.
+       - if it IS still there, its content was already synchronized
+         live through the normal Yjs FILE_UPDATED path (the open file
+         always has an active collaboration room — see useYjs.js) —
+         nothing else to do for it here.
+     Every OTHER cached Monaco model (any file opened earlier this
+     session besides the one on screen) is now stale relative to the
+     restored backend content — openFileInEditor only reads fresh
+     content when creating a brand-new model, so a cached one would
+     silently keep showing pre-restore content if reselected. Dispose
+     them all; FileExplorer's own tree resync (triggered by this same
+     event) means the next select recreates each fresh. */
+  const handleRemoteWorkspaceRestored = useCallback((payload) => {
+    const current = selectedFileRef.current;
+    const restoredFileIds = new Set((payload?.fileIds || []).map(String));
+
+    for (const [fileId, model] of Array.from(modelsRef.current.entries())) {
+      if (fileId === current?._id) continue;
+      model.dispose();
+      modelsRef.current.delete(fileId);
+      viewStatesRef.current.delete(fileId);
+      savedContentRef.current.delete(fileId);
+    }
+
+    setDirtyFileIds(new Set());
+    setSaveError('');
+
+    if (current && !restoredFileIds.has(String(current._id))) {
+      handleRemoteFileDeleted(current._id, 'This file no longer exists after the snapshot restore.');
+    } else {
+      setWorkspaceNotice(
+        `Workspace restored from snapshot "${payload?.name || 'Untitled snapshot'}"${payload?.username ? ` by ${payload.username}` : ''}.`
+      );
+    }
+  }, [handleRemoteFileDeleted]);
 
   /* Saves the currently open file's content via the Phase 4 endpoint.
      Guarded by savingRef so two overlapping saves can never be in
@@ -497,6 +538,9 @@ export default function Editor() {
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [savingSnapshot, setSavingSnapshot]     = useState(false);
   const [restoringId, setRestoringId]           = useState(null);
+  const [renamingSnapshotId, setRenamingSnapshotId] = useState(null);
+  const [deletingSnapshotId, setDeletingSnapshotId] = useState(null);
+  const [snapshotError, setSnapshotError]       = useState('');
 
   /* Fetch project metadata (Phase 3: real Project/Folder/File tree, not the old /documents API) */
   useEffect(() => {
@@ -516,7 +560,7 @@ export default function Editor() {
      Monaco via handleDocReady below once the room's initial sync has
      applied. */
   const {
-    connected, peers, getText, replaceText, cursors, sendCursor, typingSocketIds,
+    connected, peers, cursors, sendCursor, typingSocketIds,
     isLocalTyping, lock,
   } = useYjs({
     fileId:     selectedFileId,
@@ -581,15 +625,8 @@ export default function Editor() {
   useEffect(() => { cursorRenderingRef.current = cursorRendering; }, [cursorRendering]);
 
 const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: explainAI,
-        reviewCode: reviewAI, refactorCode: refactorAI, generateCode: generateAI, retry: retryAI,
+        reviewCode: reviewAI, refactorCode: refactorAI, retry: retryAI,
         clearHistory: clearAIHistory, contextNote } = useAI({ peers });
-
-  /* Phase 6.5 — Generate prompt modal. Opening it snapshots the
-     current editor context just for the modal's "using X as context"
-     hint text; the actual request re-reads the live buffer via
-     getEditorContext() at submit time, same as every other action. */
-  const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [generateHint, setGenerateHint] = useState({ hasSelection: false, fileName: '' });
 
   /* Phase 6.2 — shared Editor Context layer. getEditorContext() reads
      the live Monaco buffer/selection at call time; both handleAISend
@@ -691,39 +728,97 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
   run(editorRef.current?.getValue() ?? '', doc?.language ?? 'javascript');
 }
 
-    async function loadSnapshots() {
+  /* Phase 6.7 — Snapshots are project-wide checkpoints (every file +
+     folder), built/restored entirely server-side (see
+     snapshotService.js) — unlike the old single-document version of
+     this feature, nothing here reads/writes the Monaco buffer or the
+     Yjs doc directly. mapSnapshot adapts the backend's Mongo shape
+     (_id, createdByUsername, ...) to what SnapshotDrawer renders. */
+  function mapSnapshot(snap) {
+    return {
+      id: snap._id,
+      name: snap.name,
+      createdByUsername: snap.createdByUsername,
+      createdAt: snap.createdAt,
+      fileCount: snap.fileCount,
+      changedFiles: snap.changedFiles,
+    };
+  }
+
+  async function loadSnapshots() {
     setSnapshotsLoading(true);
+    setSnapshotError('');
     try {
-      const { data } = await api.get(`/documents/${docId}/snapshots`);
-      setSnapshots(data);
+      const { data } = await api.get(`/projects/${projectId}/snapshots`);
+      setSnapshots((data.data ?? []).map(mapSnapshot));
+    } catch (err) {
+      setSnapshotError(err.response?.data?.message || 'Failed to load snapshots.');
     } finally {
       setSnapshotsLoading(false);
     }
   }
 
-async function handleSaveSnapshot(label) {
-  setSavingSnapshot(true);
-  try {
-    const { data } = await api.post(`/documents/${docId}/snapshots`, {
-      label,
-      content: getText(),              // ← was editorRef.current.getValue()
-      language: doc?.language,
-    });
-    setSnapshots(prev => [data, ...prev]);
-  } finally {
-    setSavingSnapshot(false);
+  async function handleSaveSnapshot(name) {
+    setSavingSnapshot(true);
+    setSnapshotError('');
+    try {
+      const { data } = await api.post(`/projects/${projectId}/snapshots`, { name });
+      setSnapshots(prev => [mapSnapshot(data.data), ...prev]);
+    } catch (err) {
+      setSnapshotError(err.response?.data?.message || 'Failed to save snapshot.');
+    } finally {
+      setSavingSnapshot(false);
+    }
   }
-}
 
-async function handleRestoreSnapshot(snapshot) {
-  setRestoringId(snapshot.id);
-  try {
-    replaceText(snapshot.content);     // ← was the manual ydoc.transact block
-  } finally {
-    setRestoringId(null);
-    setShowSnapshots(false);
+  async function handleRenameSnapshot(id, name) {
+    setRenamingSnapshotId(id);
+    setSnapshotError('');
+    try {
+      const { data } = await api.patch(`/projects/snapshots/${id}`, { name });
+      setSnapshots(prev => prev.map(s => (s.id === id ? { ...s, name: data.data.name } : s)));
+    } catch (err) {
+      setSnapshotError(err.response?.data?.message || 'Failed to rename snapshot.');
+    } finally {
+      setRenamingSnapshotId(null);
+    }
   }
-}
+
+  async function handleDeleteSnapshot(id) {
+    setDeletingSnapshotId(id);
+    setSnapshotError('');
+    try {
+      await api.delete(`/projects/snapshots/${id}`);
+      setSnapshots(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      setSnapshotError(err.response?.data?.message || 'Failed to delete snapshot.');
+    } finally {
+      setDeletingSnapshotId(null);
+    }
+  }
+
+  /* Restoring fires the request and waits for the backend to do
+     everything (replace every file/folder, reconcile Yjs, broadcast
+     to collaborators — see snapshotService.restoreSnapshot). The
+     drawer closes on success; the actual workspace refresh — tree
+     resync + the currently-open file's content/close handling — comes
+     back through the SAME workspace-socket event every other
+     collaborator also receives (handleRemoteWorkspaceRestored above),
+     not a special "it was me" path, so a solo user restoring their
+     own project behaves identically to a teammate seeing someone
+     else's restore land live. */
+  async function handleRestoreSnapshot(snapshot) {
+    setRestoringId(snapshot.id);
+    setSnapshotError('');
+    try {
+      await api.post(`/projects/snapshots/${snapshot.id}/restore`);
+      setShowSnapshots(false);
+    } catch (err) {
+      setSnapshotError(err.response?.data?.message || 'Failed to restore snapshot.');
+    } finally {
+      setRestoringId(null);
+    }
+  }
 
   /* Send message to AI pair programmer — grounded in whatever file is
      currently open plus any text the user has highlighted in Monaco,
@@ -763,20 +858,6 @@ async function handleRestoreSnapshot(snapshot) {
      the backend. */
   function handleRefactor() {
     refactorAI(getEditorContext(), { username: user?.username });
-  }
-
-  /* Generate action (Phase 6.5) — the one action that needs a typed
-     instruction first, so this just opens the modal rather than firing
-     a request immediately. */
-  function handleOpenGenerate() {
-    const ctx = getEditorContext();
-    setGenerateHint({ hasSelection: !!ctx?.hasSelection, fileName: ctx?.fileName || '' });
-    setGenerateModalOpen(true);
-  }
-
-  function handleGenerateSubmit(instruction) {
-    setGenerateModalOpen(false);
-    generateAI(getEditorContext(), instruction, { username: user?.username });
   }
 
   /* Error page */
@@ -847,6 +928,7 @@ async function handleRestoreSnapshot(snapshot) {
           onRemoteFileRenamed={handleRemoteFileRenamed}
           onRemoteFileMoved={handleRemoteFileMoved}
           onRemoteFileDeleted={handleRemoteFileDeleted}
+          onRemoteWorkspaceRestored={handleRemoteWorkspaceRestored}
           filePresence={filePresence}
         />
       </div>
@@ -995,7 +1077,6 @@ async function handleRestoreSnapshot(snapshot) {
               onExplain={handleExplain}
               onReview={handleReview}
               onRefactor={handleRefactor}
-              onGenerate={handleOpenGenerate}
               actionsDisabled={!selectedFile}
             />
           </div>
@@ -1030,17 +1111,12 @@ async function handleRestoreSnapshot(snapshot) {
       saving={savingSnapshot}
       onRestore={handleRestoreSnapshot}
       restoringId={restoringId}
-    />
-
-    {/* Generate prompt modal — Phase 6.5, collects the instruction
-        before a Generate request is sent; the request itself lands in
-        the same AI Chat panel as every other action. */}
-    <GeneratePromptModal
-      open={generateModalOpen}
-      onClose={() => setGenerateModalOpen(false)}
-      onSubmit={handleGenerateSubmit}
-      hasSelection={generateHint.hasSelection}
-      fileName={generateHint.fileName}
+      onRename={handleRenameSnapshot}
+      renamingId={renamingSnapshotId}
+      onDelete={handleDeleteSnapshot}
+      deletingId={deletingSnapshotId}
+      error={snapshotError}
+      onDismissError={() => setSnapshotError('')}
     />
 
   </div>

@@ -129,6 +129,22 @@ const SOCKET_EVENTS = {
 
     /**
      * -------------------------------------------------------
+     * Snapshots (Phase 6.7)
+     * -------------------------------------------------------
+     * Project-wide checkpoints — see socket/workspaceBroadcast.js's
+     * broadcastSnapshot* functions and services/snapshotService.js.
+     * RESTORED additionally drives a full tree resync on every
+     * connected client (see useWorkspaceSync.js), since a restore can
+     * touch every file/folder in the project at once.
+     * -------------------------------------------------------
+     */
+    WORKSPACE_SNAPSHOT_CREATED: "workspace:snapshot-created",
+    WORKSPACE_SNAPSHOT_RENAMED: "workspace:snapshot-renamed",
+    WORKSPACE_SNAPSHOT_DELETED: "workspace:snapshot-deleted",
+    WORKSPACE_SNAPSHOT_RESTORED: "workspace:snapshot-restored",
+
+    /**
+     * -------------------------------------------------------
      * Team Chat (Phase 6.0)
      * -------------------------------------------------------
      * Also on the `/workspace` namespace, reusing the same

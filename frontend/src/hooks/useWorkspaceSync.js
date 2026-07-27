@@ -86,6 +86,14 @@ export function useWorkspaceSync({
   onFolderRenamed,
   onFolderDeleted,
   onFolderMoved,
+  /* Phase 6.7 — Snapshots. A restore can touch every file/folder in
+     the project at once, so it's handled separately from the 8
+     incremental mutation events above: this callback receives the
+     raw event payload ({ name, username, fileIds }) so the caller
+     (FileExplorer -> Editor.jsx) can react to the currently-open file
+     specifically, in addition to the tree resync this hook already
+     triggers for it. */
+  onSnapshotRestored,
 }) {
   const socketRef = useRef(null);
 
@@ -156,10 +164,12 @@ export function useWorkspaceSync({
     callbacksRef.current = {
       onResync, onFileCreated, onFileRenamed, onFileDeleted, onFileMoved,
       onFolderCreated, onFolderRenamed, onFolderDeleted, onFolderMoved,
+      onSnapshotRestored,
     };
   }, [
     onResync, onFileCreated, onFileRenamed, onFileDeleted, onFileMoved,
     onFolderCreated, onFolderRenamed, onFolderDeleted, onFolderMoved,
+    onSnapshotRestored,
   ]);
 
   /* Connection lifecycle — acquires the shared `/workspace` socket
@@ -267,6 +277,19 @@ export function useWorkspaceSync({
       if (historyLoadedRef.current) recordActivity('file', 'unlocked', { name, username });
     }
 
+    /* Phase 6.7 — Snapshots. Create/rename/delete feed the activity
+       feed exactly like every other event above; restore ALSO forces
+       a full tree resync (onResync — same belt-and-suspenders
+       correctness net already used after a reconnect, since a restore
+       can touch every file/folder in the project at once) and
+       forwards the raw payload so the caller can reconcile whichever
+       file it currently has open. */
+    function handleSnapshotRestored(payload) {
+      callbacksRef.current.onSnapshotRestored?.(payload);
+      callbacksRef.current.onResync?.();
+      recordActivity('snapshot', 'restored', payload);
+    }
+
     const handlers = {
       [WORKSPACE_EVENTS.FILE_CREATED]:   (payload) => { callbacksRef.current.onFileCreated?.(payload); recordActivity('file', 'created', payload); },
       [WORKSPACE_EVENTS.FILE_RENAMED]:   (payload) => { callbacksRef.current.onFileRenamed?.(payload); recordActivity('file', 'renamed', payload); },
@@ -279,6 +302,10 @@ export function useWorkspaceSync({
       [WORKSPACE_EVENTS.USER_ACTIVE]:    onUserActive,
       [WORKSPACE_EVENTS.FILE_LOCKED]:    onFileLocked,
       [WORKSPACE_EVENTS.FILE_UNLOCKED]:  onFileUnlocked,
+      [WORKSPACE_EVENTS.SNAPSHOT_CREATED]: (payload) => recordActivity('snapshot', 'created', payload),
+      [WORKSPACE_EVENTS.SNAPSHOT_RENAMED]: (payload) => recordActivity('snapshot', 'renamed', payload),
+      [WORKSPACE_EVENTS.SNAPSHOT_DELETED]: (payload) => recordActivity('snapshot', 'deleted', payload),
+      [WORKSPACE_EVENTS.SNAPSHOT_RESTORED]: handleSnapshotRestored,
     };
 
     socket.on('connect', handleConnect);

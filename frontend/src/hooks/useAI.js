@@ -36,13 +36,6 @@
  *      messages so the UI can show they're distinct from a normal chat
  *      turn.
  *
- *   3b. generateCode(editorCtx, instruction, { username }) — Phase
- *      6.5. Also a runEditorAction() wrapper, but `instruction` (the
- *      user's own typed prompt, collected by GeneratePromptModal) is
- *      passed straight through as both the user bubble text and the
- *      userPrompt sent to the backend — Generate has no fixed
- *      template like the other three.
- *
  *   4. retry(messageId) — resends the exact request that produced a
  *      failed assistant message, in place (same message id, so it
  *      doesn't duplicate in the list). Works for send() and every
@@ -88,7 +81,6 @@ const ENDPOINTS = {
   explain:  '/ai/explain',
   review:   '/ai/review',
   refactor: '/ai/refactor',
-  generate: '/ai/generate',
 };
 
 /* Per-action copy for the "editor action" requests below (explain,
@@ -114,14 +106,6 @@ const EDITOR_ACTIONS = {
     label:      (ctx) => ctx.hasSelection ? 'Refactor the selected code' : `Refactor this file${ctx.fileName ? ` — ${ctx.fileName}` : ''}`,
     userPrompt: (ctx) => ctx.hasSelection ? 'Refactor the selected code.' : 'Refactor this file.',
     noFileError: 'Open a file in this project before asking the AI to refactor code.',
-  },
-  generate: {
-    /* Never actually called — generateCode() always supplies an
-       explicit instruction — but kept for shape-consistency and as a
-       safe fallback if it's ever invoked without one. */
-    label:      () => 'Generate code',
-    userPrompt: () => 'Generate code.',
-    noFileError: 'Open a file in this project before asking the AI to generate code.',
   },
 };
 
@@ -316,30 +300,6 @@ export function useAI({ peers = [] } = {}) {
     runEditorAction('refactor', editorCtx, opts)
   ), [runEditorAction]);
 
-  /* ── generateCode ──
-     Phase 6.5. Unlike the other three, Generate is driven by the
-     user's own typed instruction rather than a fixed template, so it
-     takes one on top of editorCtx and passes it through as
-     `instruction` — runEditorAction uses it verbatim as both the user
-     bubble text and the userPrompt sent to the backend.
-
-     Two distinct guards, checked in this order: no file open always
-     surfaces runEditorAction's standard "open a file" chat message
-     (regardless of what was typed); a blank instruction with a file
-     open is a plain no-op — GeneratePromptModal validates that case
-     itself and shows its own inline message before this is ever
-     called. */
-  const generateCode = useCallback((editorCtx, instruction, opts = {}) => {
-    if (!editorCtx || !editorCtx.projectId || !editorCtx.fileId) {
-      return runEditorAction('generate', editorCtx, opts);
-    }
-
-    const trimmed = (instruction || '').trim();
-    if (!trimmed) return;
-
-    return runEditorAction('generate', editorCtx, { ...opts, instruction: trimmed });
-  }, [runEditorAction]);
-
   /* ── retry ──
      Resends the exact request stored for a failed assistant message. */
   const retry = useCallback((messageId) => {
@@ -361,7 +321,6 @@ export function useAI({ peers = [] } = {}) {
     explainCode,
     reviewCode,
     refactorCode,
-    generateCode,
     retry,
     clearHistory,
     contextNote,

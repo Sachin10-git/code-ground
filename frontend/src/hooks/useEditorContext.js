@@ -2,11 +2,10 @@
  * useEditorContext.js — shared Editor Context layer (Phase 6.2)
  *
  * The single place that reads "what is the AI looking at right now"
- * out of the live Monaco editor. Every AI action (Explain today; Chat
- * already uses it; Review/Refactor/Generate later) calls
- * getEditorContext() instead of re-deriving selection/content/language
- * itself — the point of Phase 6.2 is that adding a new action never
- * requires touching this file.
+ * out of the live Monaco editor. Every AI action (Chat, Explain,
+ * Review, Refactor) calls getEditorContext() instead of re-deriving
+ * selection/content/language itself — the point of Phase 6.2 is that
+ * adding a new action never requires touching this file.
  *
  * Always reads the live Monaco buffer (editor.getValue()), never the
  * last-saved File.content — the product promise is that the AI sees
