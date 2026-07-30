@@ -3,6 +3,7 @@ const registerSocketEvents = require("./socketEvents");
 const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../db/models/User");
 const { initializeWorkspaceNamespace } = require("./workspaceSocket");
+const { initializeTerminalNamespace } = require("./terminalSocket");
 
 let io;
 
@@ -52,6 +53,7 @@ const initializeSocket = (server) => {
 
   registerSocketEvents(io);
   initializeWorkspaceNamespace(io);
+  initializeTerminalNamespace(io);
 
   return io;
 };

@@ -32,22 +32,29 @@
  *     → Response streams back via Server-Sent Events (SSE)
  *     → Tokens appended to the last message in real time
  *
- * ── Code execution flow ─────────────────────────────────────────────
+ * ── Code execution flow (Phase 7 — interactive terminal) ────────────
  *
- *   User clicks Run
- *     → POST /api/execution/run  { code, language }  (via useExecution)
- *     → Backend spawns isolated Docker container
- *     → { exitCode, stdout, stderr, timedOut } returned in response
- *     → Output panel shows result, elapsed time, exit code
+ *   User clicks Run (Navbar — also doubles as Stop while running)
+ *     → terminalRef.current.run() (Terminal.jsx)
+ *     → socket.emit('terminal:start', { language, code, projectId })
+ *       over the /terminal namespace (services/terminalSocket.js)
+ *     → Backend spawns one Docker container with a real TTY + open
+ *       stdin for this session (executionSession.service.js)
+ *     → stdout/stderr stream back live via 'terminal:output' and are
+ *       written straight into the xterm.js instance as they arrive
+ *     → Keystrokes typed into the terminal are forwarded into the
+ *       container's stdin ('terminal:input') — Scanner/input()/cin/
+ *       readline/fmt.Scan all just work
+ *     → 'terminal:exit' reports the final exit code/reason
  *
  * ── State owned here ────────────────────────────────────────────────
  *
  *   doc          — document metadata from GET /documents/:id
  *   peers        — array of online users from Yjs awareness
  *   aiMessages   — full chat history [{role, content, streaming}]
- *   output       — last execution result {stdout, stderr, elapsed, success}
- *   outputOpen   — whether the output panel is expanded
- *   running      — true while POST /execute is in flight
+ *   outputOpen   — whether the terminal panel is expanded
+ *   running      — true while an interactive execution session is live
+ *                  (reported up from Terminal.jsx via onRunningChange)
  *   aiLoading    — true while the AI SSE stream is open
  *   connected    — Socket.io connection status
  *   editLog      — ring buffer of last 50 edits for AI context
@@ -64,7 +71,7 @@ import styles                           from './Editor.module.css';
 import AIChatPanel from '../components/AIChatPanel.jsx';
 import TeamChatPanel from '../components/TeamChatPanel.jsx';
 import Presence  from '../components/Presence.jsx';
-import OutputPanel from '../components/OutputPanel.jsx';
+import Terminal from '../components/Terminal.jsx';
 import SnapshotDrawer from '../components/SnapshotDrawer.jsx';
 import Navbar from '../components/Navbar.jsx';
 import FileExplorer from '../components/FileExplorer.jsx';
@@ -72,7 +79,6 @@ import FilePresenceBar from '../components/FilePresenceBar.jsx';
 import { useYjs } from '../hooks/useYjs.js';
 import { useAI } from '../hooks/useAI.js';
 import { useTeamChat } from '../hooks/useTeamChat.js';
-import { useExecution } from '../hooks/useExecution.js';
 import { useRemoteCursors } from '../hooks/useRemoteCursors.js';
 import { useFilePresence } from '../hooks/useFilePresence.js';
 import { useResizablePanel } from '../hooks/useResizablePanel.js';
@@ -641,7 +647,14 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
      selection-gathering logic. */
   const { getEditorContext } = useEditorContext({ editorRef, selectedFile, projectId });
 
-  const { output, running, outputOpen, setOutputOpen, run, cancel, clearOutput } = useExecution();
+  /* Phase 7 — interactive execution terminal. `running` is reported up
+     from Terminal.jsx (which owns the actual session/socket) via
+     onRunningChange so Navbar's Run/Stop button reflects it; the
+     session itself is driven imperatively through terminalRef so
+     Navbar keeps being the single place Run/Stop is triggered from. */
+  const [running, setRunning] = useState(false);
+  const [outputOpen, setOutputOpen] = useState(false);
+  const terminalRef = useRef(null);
   /* Monaco mount */
   const handleEditorMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
@@ -711,16 +724,28 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
     if (selectedFileRef.current) openFileInEditor(selectedFileRef.current);
   }, [openFileInEditor]);
 
-  /* Run code in Docker sandbox (POST /api/execution/run via
-     useExecution). Uses the shared Editor Context (Phase 6.2) rather
-     than doc?.language / editorRef directly, since `doc.language` is
-     the project-level default and can diverge from the language of
-     whichever file is actually open (see resolveLanguage) - execution
-     must match the file that's really on screen. */
-  function handleRun() {
+  /* Run code via the Phase 7 interactive execution terminal
+     (Terminal.jsx -> useTerminalSession -> /terminal socket ->
+     executionSession.service.js). Uses the shared Editor Context
+     (Phase 6.2) rather than doc?.language / editorRef directly, since
+     `doc.language` is the project-level default and can diverge from
+     the language of whichever file is actually open (see
+     resolveLanguage) - execution must match the file that's really on
+     screen. Resolved fresh inside getRunContext (called by Terminal at
+     the moment Run is actually clicked), not here at definition time. */
+  const getRunContext = useCallback(() => {
     const ctx = getEditorContext();
-    if (!ctx) return;
-    run(ctx.fileContent, ctx.language);
+    if (!ctx) return null;
+    return { language: ctx.language, code: ctx.fileContent, projectId: ctx.projectId };
+  }, [getEditorContext]);
+
+  function handleRun() {
+    setOutputOpen(true);
+    terminalRef.current?.run();
+  }
+
+  function handleStop() {
+    terminalRef.current?.stop();
   }
 
   /* Phase 6.7 — Snapshots are project-wide checkpoints (every file +
@@ -892,6 +917,7 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
       peers={peers}
       onOpenSnapshots={() => { setShowSnapshots(true); loadSnapshots(); }}
       onRunClick={handleRun}
+      onStopClick={handleStop}
       running={running}
       runDisabled={docLoading || !selectedFile}
       documentId={docId}
@@ -1106,12 +1132,12 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
           </div>
         </div>
 
-        <OutputPanel
-          output={output}
-          running={running}
+        <Terminal
+          ref={terminalRef}
           open={outputOpen}
           onToggle={() => setOutputOpen(o => !o)}
-          onClear={clearOutput}
+          getRunContext={getRunContext}
+          onRunningChange={setRunning}
         />
       </div>
 

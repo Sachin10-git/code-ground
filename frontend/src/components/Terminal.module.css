@@ -1,0 +1,180 @@
+/*
+ * Terminal.module.css — Code Ground interactive execution terminal
+ *
+ * Same design tokens as OutputPanel.module.css (which this replaces):
+ *   Base bg:       #080B14
+ *   Border:        rgba(255,255,255,0.07)
+ *   Accent blue:   #3B82F6
+ *   Success green: #34D399
+ *   Danger red:    #F87171
+ *   Text primary:  #E2E8F0
+ *   Text muted:    #64748B
+ */
+
+.panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #080B14;
+  font-family: 'Inter', -apple-system, sans-serif;
+  position: relative;
+}
+
+.panel_open {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Resize handle ───────────────────────── */
+.resize_handle {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.15s;
+  touch-action: none;
+}
+.resize_handle:hover,
+.resize_handle:focus-visible {
+  background: rgba(59, 130, 246, 0.08);
+}
+.resize_handle:focus-visible {
+  outline: none;
+}
+.grip {
+  display: block;
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: #1E293B;
+  transition: background 0.15s;
+}
+.resize_handle:hover .grip,
+.resize_handle:focus-visible .grip {
+  background: #3B82F6;
+}
+
+/* ── Header ──────────────────────────────── */
+.header {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.header_left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #E2E8F0;
+}
+.header_right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+.chevron {
+  display: flex;
+  color: #64748B;
+  transition: transform 0.15s;
+}
+.chevron_open {
+  transform: rotate(180deg);
+}
+
+.title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.status_dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot_idle { background: #334155; }
+.dot_connecting { background: #F59E0B; animation: pulse 1s ease-in-out infinite; }
+.dot_running { background: #3B82F6; animation: pulse 1s ease-in-out infinite; }
+.dot_success { background: #34D399; }
+.dot_error { background: #F87171; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.spinner {
+  animation: spin 0.7s linear infinite;
+  color: #3B82F6;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge_success {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34D399;
+}
+.badge_error {
+  background: rgba(248, 113, 113, 0.12);
+  color: #F87171;
+}
+
+.error_text {
+  font-size: 0.75rem;
+  color: #F87171;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #64748B;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.icon_btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #E2E8F0;
+}
+
+/* ── Body / xterm container ─────────────── */
+.body {
+  overflow: hidden;
+  padding: 6px 10px;
+}
+.body_collapsed {
+  padding: 0;
+  border: none;
+}
+
+.xterm_container {
+  width: 100%;
+  height: 100%;
+}

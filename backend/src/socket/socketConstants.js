@@ -163,6 +163,27 @@ const SOCKET_EVENTS = {
     TEAM_CHAT_SEND: "team-chat:send",
     TEAM_CHAT_MESSAGE: "team-chat:message",
     TEAM_CHAT_HISTORY: "team-chat:history",
+
+    /**
+     * -------------------------------------------------------
+     * Interactive Execution Terminal (Phase 7)
+     * -------------------------------------------------------
+     * Own `/terminal` namespace (see socket/terminalSocket.js),
+     * isolated the same way `/workspace` is from the default
+     * namespace's per-file Yjs rooms — a session's lifecycle
+     * (one container, one socket) has nothing to do with either of
+     * those domains and shouldn't share disconnect/room bookkeeping
+     * with them.
+     * -------------------------------------------------------
+     */
+    TERMINAL_START: "terminal:start",
+    TERMINAL_READY: "terminal:ready",
+    TERMINAL_OUTPUT: "terminal:output",
+    TERMINAL_INPUT: "terminal:input",
+    TERMINAL_RESIZE: "terminal:resize",
+    TERMINAL_STOP: "terminal:stop",
+    TERMINAL_EXIT: "terminal:exit",
+    TERMINAL_ERROR: "terminal:error",
 };
 
 module.exports = SOCKET_EVENTS;

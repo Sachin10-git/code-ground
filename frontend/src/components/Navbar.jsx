@@ -42,9 +42,14 @@
  *
  *   onOpenSnapshots {Function}  — called when the Snapshots button is clicked
  *
- *   onRunClick      {Function}  — called when Run is clicked
+ *   onRunClick      {Function}  — called when Run is clicked (idle state)
+ *   onStopClick     {Function}  — called when the same button is clicked
+ *                                  while running (Phase 7 — interactive
+ *                                  sessions can be cancelled mid-run)
  *   running         {boolean}   — true while code is executing
- *   runDisabled     {boolean}   — true to force-disable Run (e.g. doc not loaded)
+ *   runDisabled     {boolean}   — true to force-disable Run (e.g. doc not loaded).
+ *                                  Never disables the button while running —
+ *                                  Stop must always be clickable.
  *
  * ── Usage in Editor.jsx ─────────────────────────────────────────────
  *
@@ -328,6 +333,7 @@ export default function Navbar({
   onOpenSnapshots,
 
   onRunClick,
+  onStopClick,
   running         = false,
   runDisabled     = false,
   documentId,
@@ -436,13 +442,14 @@ export default function Navbar({
 
         <button
           className={`${styles.run_btn} ${running ? styles.run_btn_running : ''}`}
-          onClick={onRunClick}
-          disabled={running || runDisabled}
+          onClick={running ? onStopClick : onRunClick}
+          disabled={runDisabled}
           aria-busy={running}
-          aria-label={running ? 'Running…' : 'Run code'}
+          aria-label={running ? 'Stop execution' : 'Run code'}
+          title={running ? 'Stop execution' : 'Run code'}
         >
           {running ? (
-            <><StopIcon /> Running…</>
+            <><StopIcon /> Stop</>
           ) : (
             <><PlayIcon /> Run</>
           )}
