@@ -9,8 +9,8 @@
  * ── What this hook does ──────────────────────────────────────────────
  *
  *   1. Exposes a `run(code, language)` function — call it when the
- *      user clicks Run. It POSTs to POST /execute and stores the
- *      result in `output` state.
+ *      user clicks Run. It POSTs to POST /api/execution/run and stores
+ *      the result in `output` state.
  *
  *   2. Tracks `running` (true while a request is in flight) and
  *      `outputOpen` (whether the OutputPanel body is expanded).
@@ -18,12 +18,14 @@
  *      execution events: it opens automatically when Run is clicked,
  *      and stays closed until the first run.
  *
- *   3. Enforces a CLIENT-SIDE TIMEOUT. The backend Docker sandbox has
- *      its own timeout (10s free / 30s Pro), but if the backend never
- *      responds at all (network issue, server crash, cold start), the
- *      UI would spin forever. This hook sets a deadline slightly beyond
- *      the backend's max and surfaces a "timed out" error if hit,
- *      giving the user clear feedback to try again.
+ *   3. Enforces a CLIENT-SIDE TIMEOUT. The backend's Docker runner has
+ *      its own per-execution timeout (dockerRunner.service.js, 30s
+ *      default) and reports `timedOut` in its response if it kills the
+ *      container - but if the backend never responds at all (network
+ *      issue, server crash, cold start), the UI would spin forever.
+ *      This hook sets a deadline slightly beyond the backend's max and
+ *      surfaces its own "timed out" error if hit, giving the user clear
+ *      feedback to try again.
  *
  *   4. Supports abort — calling `cancel()` stops the in-flight request
  *      immediately via AbortController, the same pattern as useAI.js.
@@ -31,10 +33,10 @@
  *      running (the Navbar already renders this based on the `running`
  *      prop — this hook is what backs it).
  *
- *   5. Tracks client-side elapsed time as a fallback for when the
- *      backend doesn't return `elapsed_ms` (e.g. on a network error).
- *      The output object always has an `elapsed_ms` field so OutputPanel
- *      can render the badge without null-checking.
+ *   5. The backend doesn't report execution duration, so elapsed_ms is
+ *      always computed client-side (wall clock from request start to
+ *      response). The output object always has an `elapsed_ms` field so
+ *      OutputPanel can render the badge without null-checking.
  *
  * ── Output object shape ──────────────────────────────────────────────
  *
@@ -53,9 +55,10 @@
  *
  * ── Parameters ───────────────────────────────────────────────────────
  *
- *   endpoint       {string}  — POST target (default: '/execute')
- *                              Note: api.js prepends /api, so this is
- *                              the path relative to the /api base.
+ *   endpoint       {string}  — POST target (default: '/execution/run',
+ *                              i.e. POST /api/execution/run — the Phase 4
+ *                              execution REST API). Note: api.js prepends
+ *                              /api, so this is the path relative to it.
  *   timeoutMs      {number}  — client-side deadline in milliseconds.
  *                              Default: 35000 (35s) — slightly longer
  *                              than the backend's 30s Pro limit so the
@@ -128,7 +131,7 @@ const DEFAULT_TIMEOUT_MS = 35_000;
    useExecution
 ───────────────────────────────────────────────────────────────────── */
 export function useExecution({
-  endpoint  = '/execute',
+  endpoint  = '/execution/run',
   timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
 
@@ -213,20 +216,26 @@ export function useExecution({
     }, timeoutMs);
 
     try {
-      const { data } = await api.post(endpoint, { code, language }, {
+      /* The backend wraps every response in the project-wide
+         ApiResponse envelope: { success, statusCode, message, data }.
+         The actual execution result (exitCode/stdout/stderr/timedOut)
+         is `data.data`, not `data` itself. */
+      const { data: body } = await api.post(endpoint, { code, language }, {
         signal: controller.signal,
       });
+      const result = body?.data ?? {};
 
-      /* Backend returned successfully — store result as-is.
-         Fill in any missing fields defensively so OutputPanel never
-         needs to null-check individual properties. */
+      /* Backend returned successfully — store result, translated into
+         the shape OutputPanel expects. Fill in any missing fields
+         defensively so OutputPanel never needs to null-check
+         individual properties. */
       setOutput({
-        stdout:     data.stdout     ?? '',
-        stderr:     data.stderr     ?? '',
-        elapsed_ms: data.elapsed_ms ?? (Date.now() - startRef.current),
-        success:    data.success    ?? (data.exit_code === 0),
-        exit_code:  data.exit_code  ?? (data.success ? 0 : 1),
-        timed_out:  false,
+        stdout:     result.stdout ?? '',
+        stderr:     result.stderr ?? '',
+        elapsed_ms: Date.now() - startRef.current,
+        success:    result.exitCode === 0,
+        exit_code:  typeof result.exitCode === 'number' ? result.exitCode : 1,
+        timed_out:  result.timedOut ?? false,
       });
 
     } catch (err) {
@@ -235,12 +244,16 @@ export function useExecution({
          cancel we also skip — there's nothing meaningful to show. */
       if (err?.name === 'AbortError') return;
 
-      /* Real network or server error */
+      /* Real network or server error. No `err.response` at all means
+         the request never got a response - the backend is unreachable
+         (down, network partition, CORS/proxy misconfigured) rather than
+         having rejected the request, so that gets its own clearer
+         message. Otherwise use the backend's ApiError message (see
+         errorHandler.js: { success, statusCode, message }). */
       const elapsed = Date.now() - (startRef.current ?? Date.now());
-      const message =
-        err?.response?.data?.error ??
-        err?.message ??
-        'Execution failed. Please try again.';
+      const message = !err?.response
+        ? 'Could not reach the execution server. Check your connection and try again.'
+        : (err.response?.data?.message ?? err.message ?? 'Execution failed. Please try again.');
 
       setOutput({
         stdout:     '',

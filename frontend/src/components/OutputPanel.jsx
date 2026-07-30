@@ -407,6 +407,21 @@ export default function OutputPanel({
             </p>
           )}
 
+          {/* Exit code + timeout — shown as soon as a result comes back,
+              regardless of whether stdout/stderr have any content. */}
+          {output && (
+            <div className={styles.meta_row}>
+              <span className={styles.exit_code_line}>
+                Exit Code: <strong>{output.exit_code}</strong>
+              </span>
+              {output.timed_out && (
+                <span className={styles.timeout_badge} role="status">
+                  ⏱ Timed out
+                </span>
+              )}
+            </div>
+          )}
+
           {/* stdout */}
           {output?.stdout && <Stream text={output.stdout} variant="stdout" />}
 

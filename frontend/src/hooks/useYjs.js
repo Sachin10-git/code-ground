@@ -77,6 +77,10 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 const SOCKET_EVENTS = {
   ROOM_JOIN:           'room:join',
   ROOM_LEAVE:          'room:leave',
+  /* Phase 5.5 — sent back only to the joining socket if the backend's
+     CRDT hydration pipeline (crdt/hydration.js) threw instead of
+     silently proceeding with a possibly-broken document. */
+  ROOM_JOIN_FAILED:    'room:join-failed',
   USER_JOINED:         'room:user-joined',
   USER_LEFT:           'room:user-left',
   FILE_CHANGE:         'editor:file-change',
@@ -178,6 +182,9 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
      whichever file this room currently is; reset to NO_LOCK on every
      room switch (see the per-file room effect below). */
   const [lock, setLock] = useState(NO_LOCK);
+  /* Phase 5.5 — set if the backend's hydration pipeline failed for the
+     current file's room; reset to null on every room switch below. */
+  const [hydrationError, setHydrationError] = useState(null);
 
   /* The backend's editor:user-typing/stopped-typing events identify the
      typist by socketId, not userId, and peers are keyed by userId (see
@@ -284,6 +291,12 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
     let cancelled = false;
     const doc = new Y.Doc();
     ydocRef.current = doc;
+    setHydrationError(null);
+
+    function onRoomJoinFailed({ roomId: failedRoomId, message }) {
+      if (cancelled || failedRoomId !== fileId) return;
+      setHydrationError(message || 'Failed to load this file\'s collaborative session.');
+    }
 
     function onDocumentSync(update) {
       if (cancelled) return;
@@ -458,6 +471,7 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
     }
     doc.on('update', onLocalUpdate);
 
+    socket.on(SOCKET_EVENTS.ROOM_JOIN_FAILED, onRoomJoinFailed);
     socket.on(SOCKET_EVENTS.DOCUMENT_SYNC, onDocumentSync);
     socket.on(SOCKET_EVENTS.FILE_UPDATED, onFileUpdated);
     socket.on(SOCKET_EVENTS.USER_JOINED, onRoomUsers);
@@ -490,6 +504,7 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
       if (isTyping) socket.emit(SOCKET_EVENTS.TYPING_STOP, fileId);
       setIsLocalTyping(false);
 
+      socket.off(SOCKET_EVENTS.ROOM_JOIN_FAILED, onRoomJoinFailed);
       socket.off(SOCKET_EVENTS.DOCUMENT_SYNC, onDocumentSync);
       socket.off(SOCKET_EVENTS.FILE_UPDATED, onFileUpdated);
       socket.off(SOCKET_EVENTS.USER_JOINED, onRoomUsers);
@@ -513,6 +528,7 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
       setTypingSocketIds(new Set());
       setCursors({});
       setLock(NO_LOCK);
+      setHydrationError(null);
 
       throttledSendCursor.cancel();
       if (sendCursorRef.current === throttledSendCursor) sendCursorRef.current = null;
@@ -560,6 +576,7 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
     typingSocketIds,
     isLocalTyping,
     lock,
+    hydrationError,
   };
 }
 

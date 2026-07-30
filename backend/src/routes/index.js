@@ -19,6 +19,7 @@ const activityRoutes = require("./activity.routes");
 const aiRoutes = require("./ai.routes");
 const runnerRoutes = require("./runner.routes");
 const snapshotRoutes = require("./snapshot.routes");
+const executionRoutes = require("./execution.routes");
 /**
  * Root endpoint
  */
@@ -54,5 +55,7 @@ router.use("/api/projects", snapshotRoutes);
 router.use("/api/ai", aiRoutes);
 
 router.use("/api/run", runnerRoutes);
+
+router.use("/api/execution", executionRoutes);
 
 module.exports = router;

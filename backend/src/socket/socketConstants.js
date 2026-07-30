@@ -13,6 +13,10 @@ const SOCKET_EVENTS = {
 
     ROOM_JOIN: "room:join",
     ROOM_LEAVE: "room:leave",
+    /* Phase 5.5 — emitted back to the joining socket only, if the
+       CRDT hydration pipeline (crdt/hydration.js) throws instead of
+       silently proceeding with a possibly-broken/empty document. */
+    ROOM_JOIN_FAILED: "room:join-failed",
 
     USER_JOINED: "room:user-joined",
     USER_LEFT: "room:user-left",

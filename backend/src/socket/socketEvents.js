@@ -8,7 +8,6 @@ const {
 } = require("./roomManager");
 
     const Y = require("yjs");
-    const File = require("../models/file");
 
 const {
     startTyping,
@@ -46,14 +45,14 @@ const {
 
 const {
     getDocument,
-    getSharedText,
     removeDocument,
 } = require("../crdt/yjsManager");
-const { loadDocument, saveDocument } = require("../crdt/persistenceManager");
+const { saveDocument } = require("../crdt/persistenceManager");
 
 const {
-    recoverDocument,
-} = require("../crdt/snapshotManager");
+    hydrateDocument,
+    clearHydration,
+} = require("../crdt/hydration");
 
 const {
     scheduleSnapshot,
@@ -68,48 +67,6 @@ const {
     createSnapshot,
 } = require("../crdt/snapshotManager");
 
-/**
- * Phase 5 bridge: a file's collaboration room has no history the very
- * first time it's joined (no CRDTSnapshot / CRDTDocument yet), so its
- * Y.Doc starts empty. Seed it once from the File's REST-persisted
- * `content` (Phase 4) so collaborators see the real file instead of a
- * blank document. Guarded by an in-flight-promise map so two users
- * opening the same brand-new room at once can't both insert the seed
- * text (which would duplicate it) — the map's get/set happen with no
- * `await` between them, so concurrent joins always share one promise.
- */
-const fileSeedPromises = new Map();
-
-const ensureFileSeed = async (roomId, doc) => {
-
-    const sharedText = getSharedText(roomId);
-
-    if (sharedText.length > 0) return;
-
-    if (!fileSeedPromises.has(roomId)) {
-
-        fileSeedPromises.set(
-            roomId,
-            File.findById(roomId)
-                .select("content")
-                .then((file) => {
-                    if (file?.content && sharedText.length === 0) {
-                        doc.transact(() => {
-                            sharedText.insert(0, file.content);
-                        });
-                    }
-                })
-                .catch((err) => {
-                    console.error("[CRDT] Failed to seed room from file content:", err);
-                })
-        );
-
-    }
-
-    return fileSeedPromises.get(roomId);
-
-};
-
 const registerSocketEvents = (io) => {
   io.on(SOCKET_EVENTS.CONNECTION, (socket) => {
     console.log(`Socket Connected: ${socket.id}`);
@@ -118,26 +75,24 @@ const registerSocketEvents = (io) => {
 
     joinRoom(socket, roomId);
 
-    const doc = getDocument(roomId);
-
-    /* Prefer the debounced CRDTDocument save (persisted within ~2s of
-       every edit pause — see debounceManager/liveUpdateManager) over a
-       periodic CRDTSnapshot (taken every 5 minutes at most — see
-       snapshotScheduler). The snapshot used to be tried FIRST here,
-       which meant that for any room old enough to have ever produced
-       one snapshot, every future rejoin silently reverted to that
-       stale point-in-time instead of the much fresher debounced save —
-       edits (including ones a user had just clicked "Save" to persist)
-       would appear to vanish on the next reload. Snapshot recovery is
-       now only a fallback for a room that has no debounced save yet
-       (e.g. recovering from a crash before the first debounce fired). */
-    const loaded = await loadDocument(roomId, doc);
-
-    if (!loaded) {
-        await recoverDocument(roomId, doc);
+    /* Phase 5.5 — a single atomic pipeline (load CRDTDocument -> recover
+       CRDTSnapshot -> seed from File.content) that only marks the room
+       "hydrated" (yjsManager.hasDocument) once it has genuinely
+       succeeded. Concurrent joins for the same brand-new room share one
+       in-flight attempt (see crdt/hydration.js), so content is never
+       duplicated and never treated as trustworthy before it actually is. */
+    let doc;
+    try {
+        doc = await hydrateDocument(roomId);
+    } catch (err) {
+        console.error(`[CRDT] Failed to hydrate room ${roomId}:`, err);
+        socket.emit(SOCKET_EVENTS.ROOM_JOIN_FAILED, {
+            roomId,
+            message: "Failed to load this file's collaborative session. Please try reopening it.",
+        });
+        leaveRoom(socket, roomId);
+        return;
     }
-
-    await ensureFileSeed(roomId, doc);
 
     /**
      * Start periodic snapshots.
@@ -215,7 +170,7 @@ const registerSocketEvents = (io) => {
 
         removeDocument(roomId);
 
-        fileSeedPromises.delete(roomId);
+        clearHydration(roomId);
     }
 
     console.log(`${socket.id} left ${roomId}`);
@@ -369,7 +324,7 @@ socket.on(
         stopSnapshot(roomId);
         removeAwareness(roomId);
         removeDocument(roomId);
-        fileSeedPromises.delete(roomId);
+        clearHydration(roomId);
     }
 }
 

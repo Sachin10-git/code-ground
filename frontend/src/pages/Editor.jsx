@@ -35,9 +35,9 @@
  * ── Code execution flow ─────────────────────────────────────────────
  *
  *   User clicks Run
- *     → POST /api/execute  { code, language }
+ *     → POST /api/execution/run  { code, language }  (via useExecution)
  *     → Backend spawns isolated Docker container
- *     → stdout / stderr returned in response
+ *     → { exitCode, stdout, stderr, timedOut } returned in response
  *     → Output panel shows result, elapsed time, exit code
  *
  * ── State owned here ────────────────────────────────────────────────
@@ -235,6 +235,15 @@ export default function Editor() {
   const [selectedFile, setSelectedFile] = useState(null);
   const selectedFileId = selectedFile?._id ?? null;
 
+  /* Phase 5.5 — true only once THIS file's MonacoBinding has actually
+     attached (see handleDocReady below), i.e. once the backend's CRDT
+     hydration pipeline has completed and been applied locally. Gates
+     Monaco's readOnly so a user can't type into a model that Yjs is
+     about to resync out from under them - closes the "keystrokes typed
+     before the collaboration binding attaches get silently overwritten"
+     race without needing any backend timing assumptions. */
+  const [collabReady, setCollabReady] = useState(false);
+
   const [dirtyFileIds, setDirtyFileIds] = useState(() => new Set());
   const [saving,        setSaving]        = useState(false);
   const [saveError,     setSaveError]     = useState('');
@@ -244,10 +253,6 @@ export default function Editor() {
      same inline-banner style as saveError rather than a new toast
      system. */
   const [workspaceNotice, setWorkspaceNotice] = useState('');
-
-  // const [output,     setOutput]     = useState(null);
-  // const [running,    setRunning]    = useState(false);
-  // const [outputOpen, setOutputOpen] = useState(true);
 
   const editorRef  = useRef(null);
   const monacoRef  = useRef(null);
@@ -340,6 +345,7 @@ export default function Editor() {
         model,
         new Set([editor]),
       );
+      setCollabReady(true);
     } catch (e) {
       console.warn('Collaborative binding unavailable:', e.message);
     }
@@ -392,6 +398,7 @@ export default function Editor() {
     setSelectedFile(file);
     setSaveError('');
     setWorkspaceNotice('');
+    setCollabReady(false);
     openFileInEditor(file);
   }, [openFileInEditor]);
 
@@ -561,7 +568,7 @@ export default function Editor() {
      applied. */
   const {
     connected, peers, cursors, sendCursor, typingSocketIds,
-    isLocalTyping, lock,
+    isLocalTyping, lock, hydrationError,
   } = useYjs({
     fileId:     selectedFileId,
     user,
@@ -704,29 +711,17 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
     if (selectedFileRef.current) openFileInEditor(selectedFileRef.current);
   }, [openFileInEditor]);
 
-  /* Run code in Docker sandbox */
-  // async function handleRun() {
-  //   if (!editorRef.current || running) return;
-  //   const code = editorRef.current.getValue();
-  //   if (!code.trim()) return;
-
-  //   setRunning(true);
-  //   setOutput(null);
-  //   setOutputOpen(true);
-
-  //   try {
-  //     const { data } = await api.post('/execute', { code, language: doc?.language ?? 'javascript' });
-  //     setOutput(data);
-  //   } catch (err) {
-  //     setOutput({ stdout: '', stderr: err.response?.data?.error ?? 'Execution failed.', elapsed_ms: 0, success: false });
-  //   } finally {
-  //     setRunning(false);
-  //   }
-  // }
-
+  /* Run code in Docker sandbox (POST /api/execution/run via
+     useExecution). Uses the shared Editor Context (Phase 6.2) rather
+     than doc?.language / editorRef directly, since `doc.language` is
+     the project-level default and can diverge from the language of
+     whichever file is actually open (see resolveLanguage) - execution
+     must match the file that's really on screen. */
   function handleRun() {
-  run(editorRef.current?.getValue() ?? '', doc?.language ?? 'javascript');
-}
+    const ctx = getEditorContext();
+    if (!ctx) return;
+    run(ctx.fileContent, ctx.language);
+  }
 
   /* Phase 6.7 — Snapshots are project-wide checkpoints (every file +
      folder), built/restored entirely server-side (see
@@ -898,7 +893,7 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
       onOpenSnapshots={() => { setShowSnapshots(true); loadSnapshots(); }}
       onRunClick={handleRun}
       running={running}
-      runDisabled={docLoading}
+      runDisabled={docLoading || !selectedFile}
       documentId={docId}
       onSaveFile={handleSaveFile}
       fileDirty={selectedFile ? dirtyFileIds.has(selectedFile._id) : false}
@@ -959,6 +954,27 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
           </div>
         )}
 
+        {/* Phase 5.5 — brief, expected state while the collaboration
+            binding attaches; editing is disabled (see readOnly below)
+            for exactly this window so no keystroke can be silently
+            overwritten once Yjs syncs in. */}
+        {selectedFile && !isLockedByOther && !collabReady && !hydrationError && (
+          <div className={styles.lock_banner} role="status">
+            <Spinner size={13} />
+            Connecting to collaboration session…
+          </div>
+        )}
+
+        {/* Phase 5.5 — the backend's CRDT hydration pipeline failed for
+            this file (see crdt/hydration.js). File.content itself is
+            untouched by this failure - reopening the file retries. */}
+        {hydrationError && (
+          <div className={styles.lock_banner} role="alert">
+            <LockIcon />
+            {hydrationError}
+          </div>
+        )}
+
         <div className={styles.monaco_wrap}>
           {(saveError || workspaceNotice) && (
             <div
@@ -985,7 +1001,7 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
               </div>
             }
             options={{
-              readOnly:                   !selectedFile || isLockedByOther,
+              readOnly:                   !selectedFile || isLockedByOther || !collabReady,
               fontSize:                   14,
               fontFamily:                 "'JetBrains Mono', monospace",
               fontLigatures:              true,

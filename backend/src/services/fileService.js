@@ -191,9 +191,27 @@ const updateFileContent = async (fileId, userId, content) => {
 
     await file.save();
 
+    /* Phase 5.5: replace the live Y.Doc's text to EQUAL what was just
+       saved, rather than trusting it already matches (the old "just
+       flush whatever's currently there" approach) and persist that.
+       hasDocument() only returns true for a room that finished the
+       crdt/hydration.js pipeline (see yjsManager.js), so this never
+       touches a room that's still mid-hydration. Replacing rather than
+       flushing closes the remaining gap even a hydrated room can hit: a
+       client-side timing gap between receiving DOCUMENT_SYNC and its
+       MonacoBinding actually attaching, during which a save could land
+       while the live doc still holds pre-edit content - flushing that
+       verbatim would silently revert CRDTDocument out from under the
+       File.content this save just correctly wrote. */
     if (hasDocument(fileId)) {
         clearSaveTimer(fileId);
-        await saveDocument(fileId, getDocument(fileId));
+        const doc = getDocument(fileId);
+        const sharedText = doc.getText("editor");
+        doc.transact(() => {
+            sharedText.delete(0, sharedText.length);
+            sharedText.insert(0, file.content);
+        });
+        await saveDocument(fileId, doc);
     }
 
     return file;
