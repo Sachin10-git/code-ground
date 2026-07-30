@@ -175,15 +175,22 @@ const updateFileContent = async (fileId, userId, content) => {
         );
     }
 
-    const isMember = await projectService.isProjectMember(
+    // Writing content is a mutation, not a read - a "viewer" (read-only
+    // member) must not be able to save over a file's content just
+    // because they're a project member. isProjectMember() doesn't
+    // distinguish role at all; isProjectEditor() is the check this
+    // codebase already uses for equivalent writes elsewhere (see
+    // snapshotService.js's rename/delete/restore) and is the correct
+    // one here too.
+    const canEdit = await projectService.isProjectEditor(
         file.projectId,
         userId
     );
 
-    if (!isMember) {
+    if (!canEdit) {
         throw new ApiError(
             403,
-            "You are not a member of this workspace"
+            "You do not have permission to edit files in this workspace"
         );
     }
 
