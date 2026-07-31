@@ -22,6 +22,8 @@
  * both hooks share.
  */
 
+import { SOCKET_URL } from '../utils/env.js';
+
 export const WORKSPACE_EVENTS = {
   JOIN:  'workspace:join',
   LEAVE: 'workspace:leave',
@@ -77,7 +79,7 @@ async function connectWorkspaceSocket() {
      into two chunks for two different static/dynamic import sites. */
   const { io } = await import('socket.io-client');
   const token = localStorage.getItem('cg_token');
-  return io('/workspace', {
+  return io(`${SOCKET_URL}/workspace`, {
     auth:       { token },
     transports: ['websocket'],
     /* Built-in reconnection is fine here (unlike useYjs's manual

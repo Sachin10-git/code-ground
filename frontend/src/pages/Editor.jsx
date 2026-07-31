@@ -78,6 +78,7 @@ import FileExplorer from '../components/FileExplorer.jsx';
 import FilePresenceBar from '../components/FilePresenceBar.jsx';
 import { useYjs } from '../hooks/useYjs.js';
 import { useAI } from '../hooks/useAI.js';
+import { EXECUTION_ENABLED } from '../utils/env.js';
 import { useTeamChat } from '../hooks/useTeamChat.js';
 import { useRemoteCursors } from '../hooks/useRemoteCursors.js';
 import { useFilePresence } from '../hooks/useFilePresence.js';
@@ -740,6 +741,7 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
   }, [getEditorContext]);
 
   function handleRun() {
+    if (!EXECUTION_ENABLED) return;
     setOutputOpen(true);
     terminalRef.current?.run();
   }
@@ -919,7 +921,8 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
       onRunClick={handleRun}
       onStopClick={handleStop}
       running={running}
-      runDisabled={docLoading || !selectedFile}
+      runDisabled={docLoading || !selectedFile || !EXECUTION_ENABLED}
+      executionEnabled={EXECUTION_ENABLED}
       documentId={docId}
       onSaveFile={handleSaveFile}
       fileDirty={selectedFile ? dirtyFileIds.has(selectedFile._id) : false}

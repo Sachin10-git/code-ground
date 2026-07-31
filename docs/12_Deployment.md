@@ -2,7 +2,9 @@
 
 > **Scope of this document:** How to set up, run, and operate Code Ground today, plus clearly-labeled recommendations for what a production deployment would additionally require. This document does not re-explain architecture (see the companion documents referenced throughout) and does not include full deployment scripts — it explains the process, the reasoning behind it, and what to check when something goes wrong.
 >
-> **Read this before assuming anything about production readiness:** as of this writing, Code Ground has **no implemented production deployment** — no Dockerfile, no `docker-compose.yml`, no CI/CD pipeline, and no `.env.example` exist in this repository. Every workflow in §5–§6 is the real, current local-development process. Section 7 onward is explicit, throughout, about which parts are implemented today and which are recommendations for a future production rollout.
+> **Read this before assuming anything about production readiness:** as of this writing, Code Ground has **no implemented production deployment** — no Dockerfile, no `docker-compose.yml`, and no CI/CD pipeline exist in this repository. Every workflow in §5–§6 is the real, current local-development process. Section 7 onward is explicit, throughout, about which parts are implemented today and which are recommendations for a future production rollout.
+>
+> **Exception:** a *temporary*, execution-disabled cloud deployment (Vercel + Render, for UI/UX testing only) does exist as a documented path — see [`16_Deployment_Demo_Mode.md`](./16_Deployment_Demo_Mode.md). It is not the production deployment described in §7 below and intentionally runs with the Docker execution engine turned off.
 
 ---
 

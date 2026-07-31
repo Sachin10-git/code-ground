@@ -23,6 +23,7 @@ import {
   stopSession as stopSessionEvent,
   TERMINAL_EVENTS,
 } from '../services/terminalSocket.js';
+import { EXECUTION_ENABLED } from '../utils/env.js';
 
 export function useTerminalSession({ onOutput } = {}) {
   const socketRef = useRef(null);
@@ -97,6 +98,14 @@ export function useTerminalSession({ onOutput } = {}) {
   }, []);
 
   const run = useCallback(async (language, code, projectId) => {
+    /* Demo-mode gate (see utils/env.js) — never open the /terminal
+       socket at all in a deployment with execution disabled, so
+       there's no websocket round trip (and no websocket error) to
+       show the user, just the friendly message set here. */
+    if (!EXECUTION_ENABLED) {
+      setError('Code execution is unavailable in this public testing deployment.');
+      return;
+    }
     setError(null);
     setLastExit(null);
     const socket = await ensureSocket();

@@ -44,6 +44,7 @@ import React, {
 import '@xterm/xterm/css/xterm.css';
 import styles from './Terminal.module.css';
 import { useTerminalSession } from '../hooks/useTerminalSession.js';
+import { EXECUTION_ENABLED } from '../utils/env.js';
 
 const DEFAULT_HEIGHT = 220;
 const MIN_HEIGHT = 120;
@@ -115,6 +116,11 @@ const Terminal = forwardRef(function Terminal({
      socket.io-client/yjs elsewhere in this app: keeps a sizeable
      client library out of the initial bundle). ── */
   useEffect(() => {
+    /* Demo-mode gate (see utils/env.js) — never mount xterm.js or
+       touch containerRef at all when execution is disabled; the body
+       renders a static friendly message instead (see below). */
+    if (!EXECUTION_ENABLED) return;
+
     let disposed = false;
     let term;
     let resizeObserver;
@@ -206,6 +212,7 @@ const Terminal = forwardRef(function Terminal({
   }, [open, height]);
 
   const handleRun = useCallback(() => {
+    if (!EXECUTION_ENABLED) return;
     if (running) return;
     const ctx = getRunContext?.();
     if (!ctx || !ctx.code) return;
@@ -309,29 +316,32 @@ const Terminal = forwardRef(function Terminal({
       )}
 
       <div className={styles.header} onClick={onToggle} role="button" tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle?.(); } }}>
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle?.(); } }}
+        title={!EXECUTION_ENABLED ? 'Code execution is unavailable in this public testing deployment.' : undefined}>
         <div className={styles.header_left}>
           <span className={`${styles.chevron} ${open ? styles.chevron_open : ''}`}>
             <ChevronIcon />
           </span>
-          <span className={`${styles.status_dot} ${statusDot}`} />
+          <span className={`${styles.status_dot} ${EXECUTION_ENABLED ? statusDot : styles.dot_idle}`} />
           <span className={styles.title}>Terminal</span>
-          {running && <Spinner />}
+          {EXECUTION_ENABLED && running && <Spinner />}
         </div>
 
-        <div className={styles.header_right} onClick={(e) => e.stopPropagation()}>
-          {!running && lastExit && (
-            <span className={`${styles.badge} ${lastExit.exitCode === 0 ? styles.badge_success : styles.badge_error}`}>
-              {lastExit.exitCode === 0 ? '✓' : '✗'} exit {lastExit.exitCode ?? '—'}
-              {elapsedMs != null && ` · ${formatElapsed(elapsedMs)}`}
-            </span>
-          )}
-          {error && <span className={styles.error_text}>{error}</span>}
+        {EXECUTION_ENABLED && (
+          <div className={styles.header_right} onClick={(e) => e.stopPropagation()}>
+            {!running && lastExit && (
+              <span className={`${styles.badge} ${lastExit.exitCode === 0 ? styles.badge_success : styles.badge_error}`}>
+                {lastExit.exitCode === 0 ? '✓' : '✗'} exit {lastExit.exitCode ?? '—'}
+                {elapsedMs != null && ` · ${formatElapsed(elapsedMs)}`}
+              </span>
+            )}
+            {error && <span className={styles.error_text}>{error}</span>}
 
-          <button className={styles.icon_btn} onClick={handleClear} title="Clear terminal">
-            <TrashIcon />
-          </button>
-        </div>
+            <button className={styles.icon_btn} onClick={handleClear} title="Clear terminal">
+              <TrashIcon />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Always rendered (never conditionally mounted on `open`) - the
@@ -342,9 +352,19 @@ const Terminal = forwardRef(function Terminal({
           null when that effect runs, so xterm.js would never actually
           get created - visibility is toggled with CSS instead, so the
           terminal (and its scrollback/session) persists across
-          collapse/expand rather than being torn down and recreated. */}
+          collapse/expand rather than being torn down and recreated.
+          When execution is disabled, xterm.js is never mounted at all
+          (see the mount effect's early return above) - this renders a
+          static friendly message in its place instead of an empty or
+          broken container. */}
       <div className={`${styles.body} ${!open ? styles.body_collapsed : ''}`} style={{ height: open ? height : 0 }}>
-        <div ref={containerRef} className={styles.xterm_container} />
+        {EXECUTION_ENABLED ? (
+          <div ref={containerRef} className={styles.xterm_container} />
+        ) : (
+          <div className={styles.disabled_message}>
+            Code execution is unavailable in this public testing deployment.
+          </div>
+        )}
       </div>
     </div>
   );

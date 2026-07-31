@@ -50,6 +50,12 @@
  *   runDisabled     {boolean}   — true to force-disable Run (e.g. doc not loaded).
  *                                  Never disables the button while running —
  *                                  Stop must always be clickable.
+ *   executionEnabled {boolean}  — default true. Set false for a demo-mode
+ *                                  deployment without a Docker daemon (see
+ *                                  utils/env.js's EXECUTION_ENABLED) — swaps
+ *                                  the Run button's tooltip for a friendly
+ *                                  explanation. Caller is still responsible
+ *                                  for folding this into `runDisabled`.
  *
  * ── Usage in Editor.jsx ─────────────────────────────────────────────
  *
@@ -336,6 +342,7 @@ export default function Navbar({
   onStopClick,
   running         = false,
   runDisabled     = false,
+  executionEnabled = true,
   documentId,
 
   onSaveFile,
@@ -445,8 +452,8 @@ export default function Navbar({
           onClick={running ? onStopClick : onRunClick}
           disabled={runDisabled}
           aria-busy={running}
-          aria-label={running ? 'Stop execution' : 'Run code'}
-          title={running ? 'Stop execution' : 'Run code'}
+          aria-label={!executionEnabled ? 'Code execution is unavailable in this public testing deployment.' : running ? 'Stop execution' : 'Run code'}
+          title={!executionEnabled ? 'Code execution is unavailable in this public testing deployment.' : running ? 'Stop execution' : 'Run code'}
         >
           {running ? (
             <><StopIcon /> Stop</>

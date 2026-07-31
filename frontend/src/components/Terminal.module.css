@@ -178,3 +178,17 @@
   width: 100%;
   height: 100%;
 }
+
+/* ── Demo-mode disabled message ─────────── */
+.disabled_message {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 16px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 0.8125rem;
+  color: #64748B;
+}

@@ -8,6 +8,12 @@
  * services/workspaceSocket.js for that precedent, and
  * backend/src/socket/terminalSocket.js for the server-side rationale).
  *
+ * NOTE: callers should check utils/env.js's EXECUTION_ENABLED before
+ * ever invoking connectTerminalSocket() — see Terminal.jsx and
+ * useTerminalSession.js, which skip opening this connection entirely
+ * in demo-mode deployments rather than opening it and immediately
+ * getting a terminal:error back.
+ *
  * Unlike workspaceSocket.js, this is NOT a ref-counted shared
  * singleton: exactly one component (Terminal.jsx, via
  * useTerminalSession.js) uses this connection, for exactly as long as
@@ -15,6 +21,8 @@
  * mount/disconnect-on-unmount lifecycle is enough, with no reference
  * counting needed.
  */
+
+import { SOCKET_URL } from '../utils/env.js';
 
 export const TERMINAL_EVENTS = {
   START: 'terminal:start',
@@ -36,7 +44,7 @@ export const TERMINAL_EVENTS = {
 export async function connectTerminalSocket() {
   const { io } = await import('socket.io-client');
   const token = localStorage.getItem('cg_token');
-  return io('/terminal', {
+  return io(`${SOCKET_URL}/terminal`, {
     auth: { token },
     transports: ['websocket'],
     /* Deliberately no automatic reconnection: a reconnect would hand

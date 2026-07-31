@@ -67,6 +67,7 @@
  */
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { SOCKET_URL } from '../utils/env.js';
 
 /* ─────────────────────────────────────────────────────────────────────
    SOCKET EVENT NAMES — must match backend/src/socket/socketConstants.js
@@ -216,7 +217,7 @@ export function useYjs({ fileId, user, onDocReady, projectId, fileName }) {
       let socket;
       try {
         const token = localStorage.getItem('cg_token');
-        socket = io('/', {
+        socket = io(`${SOCKET_URL}/`, {
           auth:         { token },
           transports:   ['websocket'],
           /* Manual reconnect/backoff below, same as before, for full

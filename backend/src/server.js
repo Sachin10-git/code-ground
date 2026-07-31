@@ -51,12 +51,16 @@ async function validateExecutionEngine() {
 }
 
 (async () => {
-  try {
-    await validateExecutionEngine();
-  } catch (err) {
-    logger.error(`Docker startup validation crashed unexpectedly: ${err.message}`);
-    process.exit(1);
-    return;
+  if (env.EXECUTION_ENABLED) {
+    try {
+      await validateExecutionEngine();
+    } catch (err) {
+      logger.error(`Docker startup validation crashed unexpectedly: ${err.message}`);
+      process.exit(1);
+      return;
+    }
+  } else {
+    logger.warn("Execution engine disabled. Skipping Docker validation.");
   }
 
   server.listen(env.PORT, () => {

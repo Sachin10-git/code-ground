@@ -36,6 +36,16 @@ const env = {
     CLIENT_URL: process.env.CLIENT_URL,
 
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+
+    /**
+     * Temporary cloud-deployment flag (see docs/16_Deployment_Demo_Mode.md).
+     * Gates the Docker-backed code execution engine (REST /execution/run
+     * and the /terminal Socket.IO namespace) so this repo can also run on
+     * hosts without a Docker daemon (e.g. Render), for UI/UX-only demos.
+     * Defaults to enabled for local development; deployments that can't
+     * run Docker must set EXECUTION_ENABLED=false explicitly.
+     */
+    EXECUTION_ENABLED: process.env.EXECUTION_ENABLED !== "false",
 };
 
 module.exports = env;

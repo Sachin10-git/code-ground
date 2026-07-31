@@ -76,6 +76,7 @@
  */
 
 import axios from 'axios';
+import { API_URL } from './env.js';
 
 /* ─────────────────────────────────────────────────────────────────────
    CONSTANTS
@@ -100,7 +101,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 ───────────────────────────────────────────────────────────────────── */
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_URL}/api`,
   timeout: DEFAULT_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',

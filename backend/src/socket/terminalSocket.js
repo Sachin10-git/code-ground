@@ -2,6 +2,7 @@ const { verifyAccessToken } = require("../utils/jwt");
 const User = require("../db/models/User");
 const SOCKET_EVENTS = require("./socketConstants");
 const executionSession = require("../services/execution/executionSession.service");
+const env = require("../db/config/env");
 
 /**
  * Phase 7 — Interactive Execution Terminal
@@ -57,6 +58,19 @@ const initializeTerminalNamespace = (io) => {
     console.log(`[terminal] Socket connected: ${socket.id}`);
 
     socket.on(SOCKET_EVENTS.TERMINAL_START, ({ language, code, projectId } = {}) => {
+      /* Demo-mode gate (see docs/16_Deployment_Demo_Mode.md) — a
+         Docker-less deployment must never reach executionSession.js
+         (and therefore never touch dockerRunner.service.js), so this
+         is checked before createSession is called at all rather than
+         inside the session service itself. */
+      if (!env.EXECUTION_ENABLED) {
+        socket.emit(SOCKET_EVENTS.TERMINAL_ERROR, {
+          sessionId: null,
+          message: "Code execution is disabled in this deployment.",
+        });
+        return;
+      }
+
       executionSession.createSession({
         socket,
         language,
