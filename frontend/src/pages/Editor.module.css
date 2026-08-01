@@ -323,6 +323,31 @@
   flex: 1;
   min-height: 0;
   position: relative;
+  /* Higher than .topbar's z-index (100, shared with Navbar.module.css)
+     so Monaco's own overlays — e.g. the built-in "Cannot edit in
+     read-only editor" message — can render above the top bar instead
+     of being trapped beneath it. .body/.editor_wrap have no z-index of
+     their own, so this is the ancestor that actually needs to win. */
+  z-index: 101;
+}
+
+/* Runner-disabled notice — a Monaco view zone (not real file content,
+   see Editor.jsx handleEditorMount) shown at the top of every open
+   file while EXECUTION_ENABLED is false. Dimmed like a faded comment,
+   non-interactive. */
+.runner_notice_zone {
+  opacity: 0.35;
+  color: #4B5563;
+  font-style: italic;
+  font-family: 'Fira Code', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 19px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 64px;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Phase 6.6 — file lock banner. A flex sibling of .monaco_wrap (same
