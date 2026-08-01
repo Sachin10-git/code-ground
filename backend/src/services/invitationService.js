@@ -1,4 +1,4 @@
-const Invitation = require("../models/Invitation");
+const Invitation = require("../models/invitation");
 const Project = require("../db/models/project");
 const User = require("../db/models/User");
 
