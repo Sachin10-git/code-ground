@@ -243,7 +243,8 @@
 }
 
 .input::placeholder {
-  color: #2D3748;
+  color: #E2E8F0;
+  opacity: 0.35;
 }
 
 /* Autofill background override — browsers ignore background on autofill */
