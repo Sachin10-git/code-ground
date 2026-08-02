@@ -198,17 +198,20 @@
 }
 
 /* ── Dropdown panel ─────────────────────── */
+/* Portaled into <body> (see Presence.jsx) rather than positioned
+   relative to .root, so `position` and `top`/`left` are supplied
+   inline per-instance — this only sets the panel's own look and a
+   z-index high enough to clear the editor pane (Editor.module.css's
+   .monaco_wrap sits at 101) while staying under full-screen modals
+   (300, see Dashboard.module.css / InviteModal.module.css). */
 .dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
   min-width: 200px;
   max-width: 260px;
   background: #0D1117;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  z-index: 200;
+  z-index: 250;
   overflow: hidden;
   animation: dropdown_in 0.15s ease;
 }

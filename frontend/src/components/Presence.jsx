@@ -59,6 +59,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import styles from './Presence.module.css';
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ function Avatar({ name, color, active, self, size = 'md' }) {
    Opened by clicking the avatar stack. Closes on outside click,
    Escape key, or selecting nothing (it's informational, no action).
 ───────────────────────────────────────────────────────────────────── */
-function PresenceDropdown({ people, onClose }) {
+function PresenceDropdown({ people, onClose, style }) {
   const ref = useRef(null);
 
   /* Close on outside click */
@@ -152,7 +153,7 @@ function PresenceDropdown({ people, onClose }) {
   }, [onClose]);
 
   return (
-    <div ref={ref} className={styles.dropdown} role="menu" aria-label="People in this session">
+    <div ref={ref} className={styles.dropdown} style={style} role="menu" aria-label="People in this session">
       <div className={styles.dropdown_header}>
         {people.length} {people.length === 1 ? 'person' : 'people'} here
       </div>
@@ -181,6 +182,8 @@ function PresenceDropdown({ people, onClose }) {
 ───────────────────────────────────────────────────────────────────── */
 export default function Presence({ currentUser, peers = [], maxVisible = 4 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState(null);
+  const triggerRef = useRef(null);
 
   /*
    * Build the unified list: current user first (marked `self`),
@@ -211,13 +214,35 @@ export default function Presence({ currentUser, peers = [], maxVisible = 4 }) {
   const visible  = all.slice(0, maxVisible);
   const overflow = all.length - visible.length;
 
-  const toggleDropdown = useCallback(() => setDropdownOpen(o => !o), []);
+  /*
+   * The dropdown is rendered via a portal straight into <body> (see
+   * below) so its stacking is never at the mercy of an ancestor's
+   * z-index — .root sits inside the top bar, which itself sits in a
+   * stacking context that the Monaco editor pane is deliberately
+   * raised above (see Editor.module.css's .monaco_wrap comment), so a
+   * dropdown confined to .root could never out-rank the editor no
+   * matter how high its own z-index went. Portaling escapes that
+   * entirely; position is computed from the trigger's on-screen rect
+   * since the portaled node is no longer a positioned descendant of
+   * .root.
+   */
+  const toggleDropdown = useCallback(() => {
+    setDropdownOpen(open => {
+      const next = !open;
+      if (next && triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        setDropdownPos({ top: rect.bottom + 8, left: rect.left });
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <div className={styles.root} aria-label="People in this session">
 
       {/* ── Avatar stack — clickable, opens dropdown ── */}
       <button
+        ref={triggerRef}
         className={styles.stack}
         onClick={toggleDropdown}
         aria-expanded={dropdownOpen}
@@ -258,9 +283,15 @@ export default function Presence({ currentUser, peers = [], maxVisible = 4 }) {
         </span>
       </button>
 
-      {/* ── Dropdown — full list, shown on click ── */}
-      {dropdownOpen && (
-        <PresenceDropdown people={all} onClose={() => setDropdownOpen(false)} />
+      {/* ── Dropdown — full list, shown on click. Portaled to <body>
+          so it renders above the editor pane (see toggleDropdown). ── */}
+      {dropdownOpen && dropdownPos && createPortal(
+        <PresenceDropdown
+          people={all}
+          onClose={() => setDropdownOpen(false)}
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left }}
+        />,
+        document.body,
       )}
 
     </div>
