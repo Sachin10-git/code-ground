@@ -79,6 +79,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import Presence from './Presence.jsx';
 import styles    from './Navbar.module.css';
@@ -356,6 +357,33 @@ export default function Navbar({
   onToggleAIChat,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  /*
+   * Run-disabled tooltip — rendered as a real element portaled to
+   * <body> (same pattern as Presence.jsx's dropdown) instead of a
+   * CSS-only ::after on .run_btn. A pseudo-element's z-index only
+   * competes with other content inside .topbar's own stacking context
+   * (backdrop-filter + z-index:100 make .topbar one), so it could
+   * never reliably out-rank the editor pane, whose .monaco_wrap sits
+   * at z-index:101 specifically to clear .topbar. Whether that mattered
+   * visually depended on what was directly beneath the tooltip's
+   * screen position — the AI chat panel (no elevated z-index) when
+   * open, or the editor pane (101) when closed — which is why the
+   * message only showed up with the chat sidebar open. Portaling
+   * escapes .topbar's stacking context entirely.
+   */
+  const [runTooltipOpen, setRunTooltipOpen] = useState(false);
+  const [runTooltipPos, setRunTooltipPos] = useState(null);
+  const runBtnRef = useRef(null);
+
+  const showRunTooltip = () => {
+    if (!runBtnRef.current) return;
+    const rect = runBtnRef.current.getBoundingClientRect();
+    setRunTooltipPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    setRunTooltipOpen(true);
+  };
+  const hideRunTooltip = () => setRunTooltipOpen(false);
+
   return (
     <header className={styles.topbar}>
 
@@ -450,13 +478,17 @@ export default function Navbar({
         )}
 
         <button
+          ref={runBtnRef}
           className={`${styles.run_btn} ${running ? styles.run_btn_running : ''}`}
           onClick={running ? onStopClick : onRunClick}
           disabled={runDisabled}
           aria-busy={running}
           aria-label={!executionEnabled ? RUN_DISABLED_MESSAGE : running ? 'Stop execution' : 'Run code'}
           title={executionEnabled ? (running ? 'Stop execution' : 'Run code') : undefined}
-          data-tooltip={!executionEnabled ? RUN_DISABLED_MESSAGE : undefined}
+          onMouseEnter={!executionEnabled ? showRunTooltip : undefined}
+          onMouseLeave={!executionEnabled ? hideRunTooltip : undefined}
+          onFocus={!executionEnabled ? showRunTooltip : undefined}
+          onBlur={!executionEnabled ? hideRunTooltip : undefined}
         >
           {running ? (
             <><StopIcon /> Stop</>
@@ -464,6 +496,17 @@ export default function Navbar({
             <><PlayIcon /> Run</>
           )}
         </button>
+
+        {!executionEnabled && runTooltipOpen && runTooltipPos && createPortal(
+          <div
+            className={styles.run_tooltip}
+            role="tooltip"
+            style={{ top: runTooltipPos.top, right: runTooltipPos.right }}
+          >
+            {RUN_DISABLED_MESSAGE}
+          </div>,
+          document.body,
+        )}
 
       </div>
 

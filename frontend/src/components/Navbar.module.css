@@ -297,20 +297,22 @@
 
 /* ── Run button tooltip ─────────────────────────── */
 /*
- * CSS-only tooltip using the data-tooltip attribute + ::after, same
- * pattern as Presence.module.css's avatar tooltip. Shown below the
- * button (there's no room above it inside the 48px topbar) and right-
- * aligned so the wrapped text stays within the viewport instead of
- * overflowing past the right edge of the screen.
+ * Portaled straight into <body> (see Navbar.jsx's runTooltipOpen /
+ * createPortal) rather than a CSS-only ::after on .run_btn — a
+ * pseudo-element's z-index only competes within .topbar's own
+ * stacking context (backdrop-filter + z-index:100 make it one), so it
+ * could never reliably clear the editor pane, whose .monaco_wrap sits
+ * at z-index:101. `top`/`right` are supplied inline per-instance from
+ * the button's on-screen rect; this only sets the panel's look and a
+ * z-index high enough to sit above everything in the workspace (300
+ * matches full-screen modals — see Dashboard.module.css /
+ * InviteModal.module.css — so a modal opened over it would still win).
  */
-.run_btn[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+.run_tooltip {
+  position: fixed;
   width: 230px;
-  background: #161B22;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #E2E8F0;
   font-size: 0.6875rem;
   font-weight: 500;
@@ -319,32 +321,14 @@
   padding: 8px 10px;
   border-radius: 6px;
   pointer-events: none;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.15s, transform 0.15s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 300;
+  animation: run_tooltip_in 0.15s ease;
 }
 
-/* Small triangle pointing up from the tooltip to the button */
-.run_btn[data-tooltip]::before {
-  content: '';
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 14px;
-  border: 4px solid transparent;
-  border-bottom-color: #161B22;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.15s, transform 0.15s;
-  pointer-events: none;
-  z-index: 50;
-}
-
-.run_btn[data-tooltip]:hover::after,
-.run_btn[data-tooltip]:hover::before {
-  opacity: 1;
-  transform: translateY(0);
+@keyframes run_tooltip_in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Keyframes ───────────────────────────── */
@@ -377,6 +361,6 @@
 /* ── Reduced motion ──────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .spinner, .conn_off { animation: none; }
-  .lang_menu { animation: none; }
+  .lang_menu, .run_tooltip { animation: none; }
   .lang_chevron, .run_btn, .snapshots_btn { transition: none; }
 }
