@@ -720,44 +720,6 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
       sendCursorRef.current({ position, selection });
     });
 
-    /* Runner-disabled notice — Vercel/Render can't run the execution
-       terminal, so while EXECUTION_ENABLED is false, show a dimmed,
-       non-editable heads-up at the top of every file explaining why.
-       Implemented as a view zone rather than real text: it must never
-       become part of a file's actual (saved/collaborated/executed)
-       content. onDidChangeModel re-adds it on every file open/switch
-       since Monaco tears zones down when the model changes. */
-    if (!EXECUTION_ENABLED) {
-      let noticeZoneId = null;
-      const runnerNoticeText = 'Since Vercel and Render did not support code runner, it is disabled for now. '
-        + 'Soon the project will be deployed in a cloud platform and the code runner will be available there!';
-      const commentFor = (languageId) => {
-        if (languageId === 'python') return `# ${runnerNoticeText}`;
-        if (languageId === 'css') return `/* ${runnerNoticeText} */`;
-        if (languageId === 'html' || languageId === 'markdown') return `<!-- ${runnerNoticeText} -->`;
-        return `// ${runnerNoticeText}`;
-      };
-
-      editor.onDidChangeModel(() => {
-        editor.changeViewZones((accessor) => {
-          if (noticeZoneId !== null) {
-            accessor.removeZone(noticeZoneId);
-            noticeZoneId = null;
-          }
-          if (!editor.getModel()) return;
-
-          const domNode = document.createElement('div');
-          domNode.className = styles.runner_notice_zone;
-          domNode.textContent = commentFor(editor.getModel().getLanguageId());
-          noticeZoneId = accessor.addZone({
-            afterLineNumber: 0,
-            heightInLines: 1,
-            domNode,
-          });
-        });
-      });
-    }
-
     /* If a file was already selected before Monaco finished mounting,
        load it now. */
     if (selectedFileRef.current) openFileInEditor(selectedFileRef.current);
@@ -1043,6 +1005,11 @@ const { messages: aiMessages, loading: aiLoading, send: sendAI, explainCode: exp
         )}
 
         <div className={styles.monaco_wrap}>
+          {!selectedFile && !docLoading && (
+            <div className={styles.get_started_hint}>
+              Create a folder/file in the explorer. Select it and start coding!
+            </div>
+          )}
           {(saveError || workspaceNotice) && (
             <div
               role="alert"

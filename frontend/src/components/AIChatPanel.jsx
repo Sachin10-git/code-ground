@@ -308,7 +308,7 @@ export default function AIChatPanel({
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           onInput={handleInputResize}
-          placeholder="Ask about the code… (Enter to send)"
+          placeholder="Ask about the code…"
           rows={1}
           disabled={loading}
           aria-label="Message to AI pair programmer"

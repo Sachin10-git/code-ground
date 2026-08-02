@@ -331,21 +331,20 @@
   z-index: 101;
 }
 
-/* Runner-disabled notice — a Monaco view zone (not real file content,
-   see Editor.jsx handleEditorMount) shown at the top of every open
-   file while EXECUTION_ENABLED is false. Dimmed like a faded comment,
-   non-interactive. */
-.runner_notice_zone {
-  opacity: 0.35;
-  color: #4B5563;
+/* Get-started hint — shown in place of the empty Monaco editor while
+   no file is selected (e.g. right after "New document" on the
+   Dashboard). Disappears as soon as a file is picked in the explorer,
+   see Editor.jsx's `!selectedFile` check. */
+.get_started_hint {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  color: #64748B;
   font-style: italic;
   font-family: 'Fira Code', Consolas, 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 19px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding-left: 64px;
+  font-size: 15px;
+  line-height: 20px;
   pointer-events: none;
   user-select: none;
 }
