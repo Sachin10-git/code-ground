@@ -99,7 +99,8 @@ const LANGUAGES = [
 const LANG_BY_KEY = Object.fromEntries(LANGUAGES.map(l => [l.key, l]));
 
 const RUN_DISABLED_MESSAGE =
-  'This demo deployment does not support code execution. To use the execution engine, run the project locally with Docker.';
+  'Vercel does not support code runners, so the option to run your code is disabled. '
+  + 'Soon the project will be deployed on a cloud platform and it will be enabled there';
 
 /* ─────────────────────────────────────────────────────────────────────
    ICONS — inline SVG, stroke-based, inherit currentColor
