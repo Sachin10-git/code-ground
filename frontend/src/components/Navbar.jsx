@@ -50,12 +50,10 @@
  *   runDisabled     {boolean}   — true to force-disable Run (e.g. doc not loaded).
  *                                  Never disables the button while running —
  *                                  Stop must always be clickable.
- *   executionEnabled {boolean}  — default true. Set false for a demo-mode
- *                                  deployment without a Docker daemon (see
- *                                  utils/env.js's EXECUTION_ENABLED) — swaps
- *                                  the Run button's tooltip for a friendly
- *                                  explanation. Caller is still responsible
- *                                  for folding this into `runDisabled`.
+ *   executionEnabled {boolean}  — default true. When false, Run shows a
+ *                                  tooltip explaining why it's disabled.
+ *                                  Caller is still responsible for folding
+ *                                  this into `runDisabled`.
  *
  * ── Usage in Editor.jsx ─────────────────────────────────────────────
  *
@@ -99,6 +97,9 @@ const LANGUAGES = [
 ];
 
 const LANG_BY_KEY = Object.fromEntries(LANGUAGES.map(l => [l.key, l]));
+
+const RUN_DISABLED_MESSAGE =
+  'This demo deployment does not support code execution. To use the execution engine, run the project locally with Docker.';
 
 /* ─────────────────────────────────────────────────────────────────────
    ICONS — inline SVG, stroke-based, inherit currentColor
@@ -452,8 +453,9 @@ export default function Navbar({
           onClick={running ? onStopClick : onRunClick}
           disabled={runDisabled}
           aria-busy={running}
-          aria-label={!executionEnabled ? 'Code execution is unavailable in this public testing deployment.' : running ? 'Stop execution' : 'Run code'}
-          title={!executionEnabled ? 'Code execution is unavailable in this public testing deployment.' : running ? 'Stop execution' : 'Run code'}
+          aria-label={!executionEnabled ? RUN_DISABLED_MESSAGE : running ? 'Stop execution' : 'Run code'}
+          title={executionEnabled ? (running ? 'Stop execution' : 'Run code') : undefined}
+          data-tooltip={!executionEnabled ? RUN_DISABLED_MESSAGE : undefined}
         >
           {running ? (
             <><StopIcon /> Stop</>

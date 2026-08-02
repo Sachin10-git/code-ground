@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import api from "../utils/api";
 
 export default function InviteModal({
@@ -32,7 +33,7 @@ export default function InviteModal({
     setLoading(false);
   }
 
-  return (
+  return createPortal(
     <div
       style={{
         position: "fixed",
@@ -78,6 +79,7 @@ export default function InviteModal({
           Cancel
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
