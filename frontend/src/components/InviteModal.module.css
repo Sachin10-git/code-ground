@@ -1,0 +1,185 @@
+/* ── Invite collaborator modal ────────────── */
+/* Mirrors the "New document" modal on the Dashboard (see
+   Dashboard.module.css) so every modal in the app shares one look. */
+
+.modal_backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: backdrop_in 0.2s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 400px;
+  background: #0D1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+  animation: modal_in 0.25s ease;
+}
+
+.modal_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.modal_title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #E2E8F0;
+  letter-spacing: -0.02em;
+}
+
+.modal_close {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #64748B;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.modal_close:hover {
+  color: #E2E8F0;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.modal_field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.modal_label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #94A3B8;
+}
+
+.modal_input {
+  height: 42px;
+  padding: 0 0.875rem;
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #E2E8F0;
+  font-size: 0.9375rem;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.modal_input::placeholder { color: #2D3748; }
+
+.modal_input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.modal_input:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.modal_input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Actions row ──────────────────────────── */
+.actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 0.5rem;
+}
+
+.cancel_btn {
+  flex: 1;
+  height: 44px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #94A3B8;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.cancel_btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #E2E8F0;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cancel_btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.submit_btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1.4;
+  height: 44px;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+
+.submit_btn:hover:not(:disabled) {
+  background: #2563EB;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+}
+
+.submit_btn:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+.submit_btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.spinner {
+  animation: spin 0.7s linear infinite;
+  transform-origin: center;
+  flex-shrink: 0;
+}
+
+/* ── Keyframes ────────────────────────────── */
+@keyframes backdrop_in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes modal_in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal,
+  .modal_backdrop { animation: none; }
+}
